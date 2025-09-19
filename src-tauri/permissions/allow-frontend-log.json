@@ -1,0 +1,10 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-frontend-log",
+      "description": "Allow calling frontend_log",
+      "commands": { "allow": ["frontend_log"], "deny": [] }
+    }
+  ]
+}
+

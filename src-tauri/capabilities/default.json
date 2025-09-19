@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "default + app settings",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://localhost:1420", "http://127.0.0.1:1420"]
+  },
+  "permissions": [
+    "core:default",
+    "allow-get-settings",
+    "allow-save-settings",
+    "allow-ping",
+    "allow-frontend-log"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-ping",
+      "description": "Allow calling ping",
+      "commands": { "allow": ["ping"], "deny": [] }
+    }
+  ]
+}
+

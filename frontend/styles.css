@@ -1,0 +1,331 @@
+:root {
+  color-scheme: light dark;
+  --bg: #101418;
+  --card: #1b222c;
+  --accent: #4a90e2;
+  --accent-muted: rgba(74, 144, 226, 0.2);
+  --text: #e4ecf7;
+  --text-muted: rgba(228, 236, 247, 0.7);
+  --danger: #ff5f5f;
+  --success: #4cd964;
+  font-family: "Inter", "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(145deg, var(--bg), #07090c);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+main {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+header .subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+}
+
+.card {
+  background: rgba(12, 16, 22, 0.9);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.card h2 {
+  margin-top: 0;
+  font-size: 1.25rem;
+}
+
+label {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.hotkey-label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+input[type="text"],
+input[type="password"],
+select,
+textarea {
+  margin-top: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+select {
+  appearance: none;
+  background-color: rgba(14, 20, 28, 0.92);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  color: var(--text);
+  color-scheme: dark;
+  background-image: url("data:image/svg+xml,%3Csvg width=%2712%27 height=%278%27 viewBox=%270 0 12 8%27 xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cpath d=%27M2 2l4 4 4-4%27 stroke=%27%23E4ECF7%27 stroke-width=%271.5%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 12px 8px;
+  padding-right: 44px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+select:hover {
+  background-color: rgba(18, 26, 36, 0.96);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.25), 0 12px 36px rgba(0, 0, 0, 0.4);
+}
+
+select option {
+  background-color: #10171f;
+  color: var(--text);
+}
+
+select option:checked {
+  background-color: rgba(74, 144, 226, 0.35);
+  color: var(--text);
+}
+
+select::-ms-expand {
+  display: none;
+}
+
+textarea {
+  min-height: 120px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.switch-row.translate-row {
+  align-items: flex-start;
+}
+
+.switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.switch-title {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.switch-hint {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.inline-select {
+  margin-left: auto;
+  width: 160px;
+}
+
+.inline-select.is-disabled {
+  opacity: 0.5;
+}
+
+.custom-instructions-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: -4px;
+  color: var(--text-muted);
+}
+
+.custom-instructions-field textarea {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.field-hint {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+button#startHotkeyCapture {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  min-width: 180px;
+}
+
+button#startHotkeyCapture.recording {
+  background: var(--danger);
+  color: #fff;
+}
+
+button#saveBtn {
+  background: var(--accent);
+  color: white;
+}
+
+button#revertBtn {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.hotkey-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#hotkeyDisplay {
+  min-height: 20px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font-size: 0.95rem;
+  flex: 1;
+  box-sizing: border-box;
+}
+
+#hotkeyDisplay[data-empty="true"] {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.hotkey-hint {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.switch-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pill.idle { background: rgba(255, 255, 255, 0.1); }
+.pill.recording { background: var(--danger); }
+.pill.transcribing { background: rgba(255, 255, 255, 0.18); }
+.pill.success { background: var(--success); }
+
+progress {
+  width: 100%;
+  height: 6px;
+  margin-top: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+progress::-webkit-progress-bar { background: rgba(255, 255, 255, 0.1); }
+progress::-webkit-progress-value { background: var(--accent); }
+
+.result {
+  margin-top: 18px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  white-space: pre-wrap;
+}
+
+#toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 14px 18px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 8px;
+  color: white;
+  max-width: 240px;
+  animation: toast-in 0.2s ease;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+footer {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}

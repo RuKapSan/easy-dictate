@@ -1,0 +1,9 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-save-settings",
+      "description": "Allow calling save_settings",
+      "commands": { "allow": ["save_settings"], "deny": [] }
+    }
+  ]
+}

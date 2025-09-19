@@ -1,0 +1,9 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-get-settings",
+      "description": "Allow calling get_settings",
+      "commands": { "allow": ["get_settings"], "deny": [] }
+    }
+  ]
+}

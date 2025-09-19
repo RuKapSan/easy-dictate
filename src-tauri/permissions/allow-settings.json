@@ -1,0 +1,12 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-settings",
+      "description": "Allow frontend to call settings commands",
+      "commands": {
+        "allow": ["get_settings", "save_settings"],
+        "deny": []
+      }
+    }
+  ]
+}

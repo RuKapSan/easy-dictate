@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Easy Dictate</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Easy Dictate</h1>
+      <p class="subtitle">Голосовое диктование в любой программе</p>
+    </header>
+
+    <section class="card" id="statusCard">
+      <h2>Статус</h2>
+      <div class="status-line">
+        <span id="status-indicator" class="pill idle">Ожидает</span>
+        <span id="status-text">Готово к записи по горячей клавише.</span>
+      </div>
+      <progress id="progress" max="1" value="0" hidden></progress>
+      <pre id="last-result" class="result" hidden></pre>
+    </section>
+
+    <section class="card">
+      <h2>Настройки</h2>
+      <form id="settings-form">
+        <label>
+          API ключ OpenAI
+          <input type="password" id="apiKey" autocomplete="off" placeholder="sk-..." />
+        </label>
+        <label>
+          Модель
+          <select id="model">
+            <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
+            <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
+            <option value="whisper-1">whisper-1 (fallback)</option>
+          </select>
+        </label>
+        <label class="hotkey-label">
+          Горячая клавиша
+          <div class="hotkey-row">
+            <button type="button" id="startHotkeyCapture">Записать сочетание</button>
+            <span
+              id="hotkeyDisplay"
+              data-placeholder="Комбинация не задана"
+              data-empty="true"
+            >Комбинация не задана</span>
+            <input type="hidden" id="hotkey" />
+          </div>
+          <small class="hotkey-hint">Нажмите «Записать сочетание», затем удерживайте нужные клавиши или кнопку мыши.</small>
+        </label>
+        <label class="switch-row">
+          <input type="checkbox" id="simulateTyping" />
+          <span>Набирать текст по символам через эмуляцию клавиатуры</span>
+        </label>
+        <label class="switch-row">
+          <input type="checkbox" id="copyToClipboard" />
+          <span>Дублировать результат в буфер обмена</span>
+        </label>
+        <label class="switch-row">
+          <input type="checkbox" id="autoStart" />
+          <span>Запускать вместе с системой</span>
+        </label>
+        <label class="switch-row">
+          <input type="checkbox" id="useStreaming" checked />
+          <span>Показывать текст по мере распознавания (если поддерживается)</span>
+        </label>
+        <label class="switch-row translate-row">
+          <input type="checkbox" id="autoTranslate" />
+          <span class="switch-text">
+            <span class="switch-title">Переводить результат</span>
+            <span class="switch-hint">Автоматически переводить текст на выбранный язык</span>
+          </span>
+          <select id="targetLanguage" class="inline-select">
+            <option value="русский">На русский</option>
+            <option value="английский">На английский</option>
+          </select>
+        </label>
+        <label class="switch-row custom-instructions-toggle">
+          <input type="checkbox" id="useCustomInstructions" />
+          <span class="switch-text">
+            <span class="switch-title">Применять свои инструкции</span>
+            <span class="switch-hint">Например: «Сделай краткое резюме в Markdown»</span>
+          </span>
+        </label>
+        <label class="custom-instructions-field" id="customInstructionsWrapper" hidden>
+          Свои инструкции
+          <textarea
+            id="customInstructions"
+            rows="3"
+            placeholder="Опишите, как доработать распознанный текст"
+          ></textarea>
+          <small class="field-hint">Инструкции выполняются после распознавания и перевода (если включён). Оставьте поле пустым, чтобы использовать исходный результат.</small>
+        </label>
+        <div class="actions">
+          <button type="submit" id="saveBtn">Сохранить</button>
+          <button type="button" id="revertBtn">Отменить</button>
+        </div>
+      </form>
+    </section>
+
+    <footer>
+      <p>Версия <span id="app-version">-</span></p>
+    </footer>
+  </main>
+
+  <div id="toast" hidden></div>
+
+  <script src="main.js" defer></script>
+</body>
+</html>
