@@ -8,9 +8,24 @@ const DEFAULT_HOTKEY: &str = "Ctrl+Shift+Space";
 const CONFIG_FILE: &str = "settings.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TranscriptionProvider {
+    OpenAI,
+    Groq,
+}
+
+impl Default for TranscriptionProvider {
+    fn default() -> Self {
+        TranscriptionProvider::OpenAI
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
+    pub provider: TranscriptionProvider,
     pub api_key: String,
+    pub groq_api_key: String,
     pub model: String,
     pub hotkey: String,
     pub simulate_typing: bool,
@@ -26,7 +41,9 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            provider: TranscriptionProvider::OpenAI,
             api_key: String::new(),
+            groq_api_key: String::new(),
             model: "gpt-4o-transcribe".to_string(),
             hotkey: DEFAULT_HOTKEY.to_string(),
             simulate_typing: true,
@@ -53,6 +70,7 @@ impl AppSettings {
 
     pub fn sanitized(mut self) -> Self {
         self.api_key = self.api_key.trim().to_string();
+        self.groq_api_key = self.groq_api_key.trim().to_string();
         self.model = if self.model.trim().is_empty() {
             "gpt-4o-transcribe".to_string()
         } else {

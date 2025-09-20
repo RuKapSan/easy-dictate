@@ -35,7 +35,11 @@ const resultEl = document.getElementById("last-result");
 const toastEl = document.getElementById("toast");
 
 const form = document.getElementById("settings-form");
+const providerSelect = document.getElementById("provider");
 const apiKeyInput = document.getElementById("apiKey");
+const groqApiKeyInput = document.getElementById("groqApiKey");
+const openaiApiKeyLabel = document.getElementById("openai-api-key-label");
+const groqApiKeyLabel = document.getElementById("groq-api-key-label");
 const modelSelect = document.getElementById("model");
 const hotkeyHiddenInput = document.getElementById("hotkey");
 const hotkeyDisplay = document.getElementById("hotkeyDisplay");
@@ -330,6 +334,39 @@ function syncCustomInstructionsUi() {
   customInstructionsInput.disabled = !enabled;
 }
 
+function updateProviderFields() {
+  const isGroq = providerSelect.value === "groq";
+  openaiApiKeyLabel.hidden = isGroq;
+  groqApiKeyLabel.hidden = !isGroq;
+
+  // Update model options based on provider
+  const currentModel = modelSelect.value;
+  modelSelect.innerHTML = '';
+
+  if (isGroq) {
+    modelSelect.innerHTML = `
+      <option value="groq/whisper-large-v3-turbo">Whisper Large v3 Turbo</option>
+      <option value="groq/whisper-large-v3">Whisper Large v3</option>
+    `;
+    if (!currentModel.startsWith("groq/")) {
+      modelSelect.value = "groq/whisper-large-v3-turbo";
+    } else {
+      modelSelect.value = currentModel;
+    }
+  } else {
+    modelSelect.innerHTML = `
+      <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
+      <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
+      <option value="whisper-1">whisper-1 (fallback)</option>
+    `;
+    if (currentModel.startsWith("groq/")) {
+      modelSelect.value = "gpt-4o-transcribe";
+    } else {
+      modelSelect.value = currentModel;
+    }
+  }
+}
+
 syncTranslationUi();
 syncCustomInstructionsUi();
 
@@ -344,8 +381,11 @@ async function loadSettings() {
     const settings = await invoke("get_settings");
     dbg("invoke(get_settings) ok");
     initialSettings = { ...settings };
+    providerSelect.value = settings.provider ?? "openai";
     apiKeyInput.value = settings.api_key ?? "";
+    groqApiKeyInput.value = settings.groq_api_key ?? "";
     modelSelect.value = settings.model ?? "gpt-4o-transcribe";
+    updateProviderFields();
     renderHotkey(settings.hotkey ?? DEFAULT_HOTKEY);
     simulateTypingInput.checked = Boolean(settings.simulate_typing);
     copyToClipboardInput.checked = Boolean(settings.copy_to_clipboard);
@@ -369,7 +409,9 @@ async function loadSettings() {
 
 function currentSettings() {
   return {
+    provider: providerSelect.value,
     api_key: apiKeyInput.value.trim(),
+    groq_api_key: groqApiKeyInput.value.trim(),
     model: modelSelect.value,
     hotkey: normalizeHotkeyValue(hotkeyHiddenInput?.value),
     simulate_typing: simulateTypingInput.checked,
@@ -412,8 +454,11 @@ form?.addEventListener("submit", async (event) => {
 revertBtn?.addEventListener("click", () => {
   if (!initialSettings) return;
   cancelHotkeyCapture();
+  providerSelect.value = initialSettings.provider ?? "openai";
   apiKeyInput.value = initialSettings.api_key ?? "";
+  groqApiKeyInput.value = initialSettings.groq_api_key ?? "";
   modelSelect.value = initialSettings.model ?? "gpt-4o-transcribe";
+  updateProviderFields();
   renderHotkey(initialSettings.hotkey ?? DEFAULT_HOTKEY);
   simulateTypingInput.checked = Boolean(initialSettings.simulate_typing);
   copyToClipboardInput.checked = Boolean(initialSettings.copy_to_clipboard);
@@ -447,6 +492,10 @@ autoTranslateInput?.addEventListener("change", () => {
 
 useCustomInstructionsInput?.addEventListener("change", () => {
   syncCustomInstructionsUi();
+});
+
+providerSelect?.addEventListener("change", () => {
+  updateProviderFields();
 });
 
 window.addEventListener("keydown", (event) => {

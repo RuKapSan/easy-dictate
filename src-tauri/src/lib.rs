@@ -16,14 +16,16 @@ use tauri_plugin_clipboard_manager::ClipboardExt as _;
 use tauri_plugin_global_shortcut::{GlobalShortcut, ShortcutState};
 
 mod audio;
+mod groq;
 mod input;
 mod openai;
 mod settings;
 
 use audio::{Recorder, RecordingSession};
+use groq::GroqClient;
 use input::KeyboardController;
 use openai::{OpenAiClient, TranscriptionJob};
-use settings::{AppSettings, SettingsStore};
+use settings::{AppSettings, SettingsStore, TranscriptionProvider};
 
 const EVENT_STATUS: &str = "transcription://status";
 const EVENT_PARTIAL: &str = "transcription://partial";
@@ -35,6 +37,7 @@ struct AppState {
     recorder: Recorder,
     active_recording: Mutex<Option<RecordingSession>>,
     openai: OpenAiClient,
+    groq: GroqClient,
     keyboard: Arc<KeyboardController>,
     is_transcribing: AtomicBool,
     tray_status_item: Mutex<Option<MenuItem<tauri::Wry>>>,
@@ -48,6 +51,7 @@ impl AppState {
             recorder: Recorder::new()?,
             active_recording: Mutex::new(None),
             openai: OpenAiClient::new()?,
+            groq: GroqClient::new()?,
             keyboard: Arc::new(KeyboardController::new()?),
             is_transcribing: AtomicBool::new(false),
             tray_status_item: Mutex::new(None),
@@ -275,17 +279,27 @@ fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
     tauri::async_runtime::spawn(async move {
         let state: State<'_, AppState> = app_handle.state();
         let settings = state.current_settings().await;
-        let client = state.openai.clone();
+        let openai_client = state.openai.clone();
+        let groq_client = state.groq.clone();
         let keyboard = state.keyboard.clone();
 
-        if settings.api_key.trim().is_empty() {
-            emit_error(&app_handle, "В настройках не указан API ключ OpenAI");
+        let api_key = match settings.provider {
+            TranscriptionProvider::OpenAI => settings.api_key.clone(),
+            TranscriptionProvider::Groq => settings.groq_api_key.clone(),
+        };
+
+        if api_key.trim().is_empty() {
+            let provider_name = match settings.provider {
+                TranscriptionProvider::OpenAI => "OpenAI",
+                TranscriptionProvider::Groq => "Groq",
+            };
+            emit_error(&app_handle, &format!("В настройках не указан API ключ {}", provider_name));
             state.is_transcribing.store(false, Ordering::SeqCst);
             return;
         }
 
         let job = TranscriptionJob {
-            api_key: settings.api_key.clone(),
+            api_key: api_key.clone(),
             model: settings.model.clone(),
             audio_wav,
             auto_translate: settings.auto_translate,
@@ -295,7 +309,10 @@ fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
         };
 
         let job_clone = job.clone();
-        let result = client.transcribe(job).await;
+        let result = match settings.provider {
+            TranscriptionProvider::OpenAI => openai_client.transcribe(job).await,
+            TranscriptionProvider::Groq => groq_client.transcribe(job).await,
+        };
 
         match result {
             Ok(mut text) => {
@@ -312,7 +329,7 @@ fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
                         emit_status(&app_handle, "transcribing", processing_message);
                     }
 
-                    match client.refine_transcript(text.clone(), &job_clone).await {
+                    match openai_client.refine_transcript(text.clone(), &job_clone).await {
                         Ok(refined) => {
                             text = refined;
                         }
