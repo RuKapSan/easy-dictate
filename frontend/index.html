@@ -34,7 +34,7 @@
           </select>
         </label>
         <label id="openai-api-key-label">
-          API ключ OpenAI
+          API ключ OpenAI <span id="openai-api-hint" style="font-size: 0.85em; color: #666;"></span>
           <input type="password" id="apiKey" autocomplete="off" placeholder="sk-..." />
         </label>
         <label id="groq-api-key-label" hidden>
@@ -89,6 +89,13 @@
           <select id="targetLanguage" class="inline-select">
             <option value="русский">На русский</option>
             <option value="английский">На английский</option>
+          </select>
+        </label>
+        <label id="llm-provider-label" hidden style="margin-left: 2rem;">
+          LLM для обработки
+          <select id="llmProvider" style="margin-left: 0.5rem;">
+            <option value="openai">OpenAI GPT-4o-mini</option>
+            <option value="groq">Groq OSS-20B</option>
           </select>
         </label>
         <label class="switch-row custom-instructions-toggle">

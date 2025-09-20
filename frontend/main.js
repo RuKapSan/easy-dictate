@@ -53,6 +53,8 @@ const targetLanguageSelect = document.getElementById("targetLanguage");
 const useCustomInstructionsInput = document.getElementById("useCustomInstructions");
 const customInstructionsWrapper = document.getElementById("customInstructionsWrapper");
 const customInstructionsInput = document.getElementById("customInstructions");
+const llmProviderLabel = document.getElementById("llm-provider-label");
+const llmProviderSelect = document.getElementById("llmProvider");
 const revertBtn = document.getElementById("revertBtn");
 
 const DEFAULT_HOTKEY = "Ctrl+Shift+Space";
@@ -325,6 +327,14 @@ function syncTranslationUi() {
   const enabled = Boolean(autoTranslateInput?.checked);
   targetLanguageSelect.disabled = !enabled;
   targetLanguageSelect.classList.toggle("is-disabled", !enabled);
+  updateLLMProviderVisibility();
+}
+
+function updateLLMProviderVisibility() {
+  const needsLLM = autoTranslateInput?.checked || useCustomInstructionsInput?.checked;
+  if (llmProviderLabel) {
+    llmProviderLabel.hidden = !needsLLM;
+  }
 }
 
 function syncCustomInstructionsUi() {
@@ -332,12 +342,19 @@ function syncCustomInstructionsUi() {
   const enabled = Boolean(useCustomInstructionsInput?.checked);
   customInstructionsWrapper.hidden = !enabled;
   customInstructionsInput.disabled = !enabled;
+  updateLLMProviderVisibility();
 }
 
 function updateProviderFields() {
   const isGroq = providerSelect.value === "groq";
-  openaiApiKeyLabel.hidden = isGroq;
+  openaiApiKeyLabel.hidden = false; // Always show OpenAI key field
   groqApiKeyLabel.hidden = !isGroq;
+
+  // Update hint for OpenAI API key
+  const openaiHint = document.getElementById("openai-api-hint");
+  if (openaiHint) {
+    openaiHint.textContent = isGroq ? "(для перевода и инструкций)" : "";
+  }
 
   // Update model options based on provider
   const currentModel = modelSelect.value;
@@ -382,6 +399,7 @@ async function loadSettings() {
     dbg("invoke(get_settings) ok");
     initialSettings = { ...settings };
     providerSelect.value = settings.provider ?? "openai";
+    if (llmProviderSelect) llmProviderSelect.value = settings.llm_provider ?? "openai";
     apiKeyInput.value = settings.api_key ?? "";
     groqApiKeyInput.value = settings.groq_api_key ?? "";
     modelSelect.value = settings.model ?? "gpt-4o-transcribe";
@@ -410,6 +428,7 @@ async function loadSettings() {
 function currentSettings() {
   return {
     provider: providerSelect.value,
+    llm_provider: llmProviderSelect?.value ?? "openai",
     api_key: apiKeyInput.value.trim(),
     groq_api_key: groqApiKeyInput.value.trim(),
     model: modelSelect.value,
@@ -455,6 +474,7 @@ revertBtn?.addEventListener("click", () => {
   if (!initialSettings) return;
   cancelHotkeyCapture();
   providerSelect.value = initialSettings.provider ?? "openai";
+  if (llmProviderSelect) llmProviderSelect.value = initialSettings.llm_provider ?? "openai";
   apiKeyInput.value = initialSettings.api_key ?? "";
   groqApiKeyInput.value = initialSettings.groq_api_key ?? "";
   modelSelect.value = initialSettings.model ?? "gpt-4o-transcribe";

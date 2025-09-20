@@ -21,9 +21,23 @@ impl Default for TranscriptionProvider {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LLMProvider {
+    OpenAI,
+    Groq,
+}
+
+impl Default for LLMProvider {
+    fn default() -> Self {
+        LLMProvider::OpenAI
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
     pub provider: TranscriptionProvider,
+    pub llm_provider: LLMProvider,
     pub api_key: String,
     pub groq_api_key: String,
     pub model: String,
@@ -42,6 +56,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             provider: TranscriptionProvider::OpenAI,
+            llm_provider: LLMProvider::OpenAI,
             api_key: String::new(),
             groq_api_key: String::new(),
             model: "gpt-4o-transcribe".to_string(),

@@ -17,15 +17,17 @@ use tauri_plugin_global_shortcut::{GlobalShortcut, ShortcutState};
 
 mod audio;
 mod groq;
+mod groq_llm;
 mod input;
 mod openai;
 mod settings;
 
 use audio::{Recorder, RecordingSession};
 use groq::GroqClient;
+use groq_llm::GroqLLMClient;
 use input::KeyboardController;
 use openai::{OpenAiClient, TranscriptionJob};
-use settings::{AppSettings, SettingsStore, TranscriptionProvider};
+use settings::{AppSettings, SettingsStore, TranscriptionProvider, LLMProvider};
 
 const EVENT_STATUS: &str = "transcription://status";
 const EVENT_PARTIAL: &str = "transcription://partial";
@@ -38,6 +40,7 @@ struct AppState {
     active_recording: Mutex<Option<RecordingSession>>,
     openai: OpenAiClient,
     groq: GroqClient,
+    groq_llm: GroqLLMClient,
     keyboard: Arc<KeyboardController>,
     is_transcribing: AtomicBool,
     tray_status_item: Mutex<Option<MenuItem<tauri::Wry>>>,
@@ -52,6 +55,7 @@ impl AppState {
             active_recording: Mutex::new(None),
             openai: OpenAiClient::new()?,
             groq: GroqClient::new()?,
+            groq_llm: GroqLLMClient::new()?,
             keyboard: Arc::new(KeyboardController::new()?),
             is_transcribing: AtomicBool::new(false),
             tray_status_item: Mutex::new(None),
@@ -281,14 +285,15 @@ fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
         let settings = state.current_settings().await;
         let openai_client = state.openai.clone();
         let groq_client = state.groq.clone();
+        let groq_llm_client = state.groq_llm.clone();
         let keyboard = state.keyboard.clone();
 
-        let api_key = match settings.provider {
+        let transcription_api_key = match settings.provider {
             TranscriptionProvider::OpenAI => settings.api_key.clone(),
             TranscriptionProvider::Groq => settings.groq_api_key.clone(),
         };
 
-        if api_key.trim().is_empty() {
+        if transcription_api_key.trim().is_empty() {
             let provider_name = match settings.provider {
                 TranscriptionProvider::OpenAI => "OpenAI",
                 TranscriptionProvider::Groq => "Groq",
@@ -298,8 +303,26 @@ fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
             return;
         }
 
+        // Check if we need post-processing and have the right API key
+        let needs_postprocessing = settings.auto_translate || (settings.use_custom_instructions && !settings.custom_instructions.trim().is_empty());
+        if needs_postprocessing {
+            let llm_key_available = match settings.llm_provider {
+                LLMProvider::OpenAI => !settings.api_key.trim().is_empty(),
+                LLMProvider::Groq => !settings.groq_api_key.trim().is_empty(),
+            };
+            if !llm_key_available {
+                let llm_name = match settings.llm_provider {
+                    LLMProvider::OpenAI => "OpenAI",
+                    LLMProvider::Groq => "Groq",
+                };
+                emit_error(&app_handle, &format!("Для перевода и инструкций требуется {} API ключ", llm_name));
+                state.is_transcribing.store(false, Ordering::SeqCst);
+                return;
+            }
+        }
+
         let job = TranscriptionJob {
-            api_key: api_key.clone(),
+            api_key: transcription_api_key.clone(),
             model: settings.model.clone(),
             audio_wav,
             auto_translate: settings.auto_translate,
@@ -329,7 +352,27 @@ fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
                         emit_status(&app_handle, "transcribing", processing_message);
                     }
 
-                    match openai_client.refine_transcript(text.clone(), &job_clone).await {
+                    // Create a job for post-processing with the appropriate API key
+                    let postprocess_api_key = match settings.llm_provider {
+                        LLMProvider::OpenAI => settings.api_key.clone(),
+                        LLMProvider::Groq => settings.groq_api_key.clone(),
+                    };
+                    let postprocess_job = TranscriptionJob {
+                        api_key: postprocess_api_key,
+                        model: job_clone.model.clone(),
+                        audio_wav: vec![], // Not needed for refine
+                        auto_translate: job_clone.auto_translate,
+                        target_language: job_clone.target_language.clone(),
+                        use_custom_instructions: job_clone.use_custom_instructions,
+                        custom_instructions: job_clone.custom_instructions.clone(),
+                    };
+
+                    let refine_result = match settings.llm_provider {
+                        LLMProvider::OpenAI => openai_client.refine_transcript(text.clone(), &postprocess_job).await,
+                        LLMProvider::Groq => groq_llm_client.refine_transcript(text.clone(), &postprocess_job).await,
+                    };
+
+                    match refine_result {
                         Ok(refined) => {
                             text = refined;
                         }
