@@ -83,6 +83,62 @@ impl AppSettings {
         }
     }
 
+    pub fn is_valid_hotkey(&self) -> bool {
+        let hotkey = self.normalized_hotkey();
+        if hotkey.is_empty() {
+            return false;
+        }
+
+        let parts: Vec<&str> = hotkey.split('+').map(|s| s.trim()).collect();
+        if parts.is_empty() {
+            return false;
+        }
+
+        // Check if last part is a valid main key (not a modifier)
+        let main_key = parts.last().unwrap();
+        let modifiers = &parts[..parts.len()-1];
+
+        // Valid main keys
+        let valid_main_keys = [
+            "Space", "Escape", "Enter", "Tab", "Backspace", "Delete",
+            "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "CapsLock",
+            "PageUp", "PageDown", "Home", "End", "Insert", "Pause",
+            "PrintScreen", "ScrollLock", "ContextMenu", "Backquote",
+            "Minus", "Equal", "BracketLeft", "BracketRight", "Backslash",
+            "Semicolon", "Quote", "Comma", "Period", "Slash"
+        ];
+
+        let valid_function_keys = (1..=24).map(|i| format!("F{i}")).collect::<Vec<_>>();
+        let valid_digit_keys = (0..=9).map(|i| i.to_string()).collect::<Vec<_>>();
+        let valid_letter_keys = (b'A'..=b'Z').map(|c| (c as char).to_string()).collect::<Vec<_>>();
+
+        let all_valid_keys = [
+            valid_main_keys.iter().map(|s| *s).collect::<Vec<_>>(),
+            valid_function_keys,
+            valid_digit_keys,
+            valid_letter_keys,
+        ].concat();
+
+        if !all_valid_keys.contains(&main_key) {
+            return false;
+        }
+
+        // Check modifiers are valid
+        let valid_modifiers = ["Ctrl", "Shift", "Alt", "Win"];
+        for modifier in modifiers {
+            if !valid_modifiers.contains(modifier) {
+                return false;
+            }
+        }
+
+        // Must have at least one modifier or be a function key
+        if modifiers.is_empty() && !main_key.starts_with('F') {
+            return false;
+        }
+
+        true
+    }
+
     pub fn sanitized(mut self) -> Self {
         self.api_key = self.api_key.trim().to_string();
         self.groq_api_key = self.groq_api_key.trim().to_string();
@@ -101,6 +157,26 @@ impl AppSettings {
         if self.use_custom_instructions && self.custom_instructions.is_empty() {
             self.use_custom_instructions = false;
         }
+
+        // Validate API keys for selected providers
+        if self.provider == TranscriptionProvider::OpenAI && self.api_key.is_empty() {
+            return AppSettings::default();
+        }
+        if self.provider == TranscriptionProvider::Groq && self.groq_api_key.is_empty() {
+            return AppSettings::default();
+        }
+
+        // Validate LLM provider API keys if needed
+        let needs_llm = self.auto_translate || (self.use_custom_instructions && !self.custom_instructions.is_empty());
+        if needs_llm {
+            if self.llm_provider == LLMProvider::OpenAI && self.api_key.is_empty() {
+                return AppSettings::default();
+            }
+            if self.llm_provider == LLMProvider::Groq && self.groq_api_key.is_empty() {
+                return AppSettings::default();
+            }
+        }
+
         self
     }
 }
@@ -136,7 +212,7 @@ impl SettingsStore {
 
     pub async fn save(&self, settings: &AppSettings) -> Result<()> {
         if !self.root.exists() {
-            fs::create_dir_all(&self.root).with_context(|| {
+            async_fs::create_dir_all(&self.root).await.with_context(|| {
                 format!("Не удалось создать каталог {root:?}", root = self.root)
             })?;
         }

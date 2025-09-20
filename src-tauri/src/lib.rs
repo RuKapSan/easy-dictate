@@ -411,6 +411,7 @@ fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
             }
         }
 
+        // Always reset transcribing state and emit idle status
         state.is_transcribing.store(false, Ordering::SeqCst);
         emit_status(&app_handle, "idle", "Готово к записи по горячей клавише");
     });

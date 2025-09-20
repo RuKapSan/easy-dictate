@@ -151,7 +151,7 @@ impl OpenAiClient {
         );
 
         let request = ChatRequest {
-            model: "gpt-4o-mini".to_string(),
+            model: job.model.clone(),
             messages: vec![
                 ChatMessage {
                     role: "system".to_string(),

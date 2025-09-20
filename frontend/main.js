@@ -213,6 +213,7 @@ function cancelHotkeyCapture() {
   pressedModifiers.clear();
   applyHotkeyRecordingStyles(false);
   renderHotkey(hotkeyBeforeCapture);
+  hotkeyBeforeCapture = ""; // Clear to prevent memory leaks
 }
 
 function finishHotkeyCapture(binding) {

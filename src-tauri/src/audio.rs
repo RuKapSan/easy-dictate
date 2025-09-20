@@ -46,13 +46,17 @@ impl Recorder {
         let handle = thread::spawn(move || -> Result<RecordingResult> {
             let channels = config.channels as usize;
             let sample_rate = config.sample_rate.0;
-            let buffer = Arc::new(Mutex::new(Vec::<f32>::with_capacity(
-                (sample_rate as usize) * channels * 10,
-            )));
+            let max_samples = (sample_rate as usize) * channels * 120; // 2 minutes max
+            let buffer = Arc::new(Mutex::new(Vec::<f32>::with_capacity(max_samples)));
             let buffer_clone = buffer.clone();
 
             let err_fn = |err| {
                 eprintln!("Ошибка потока записи: {err}");
+                // Try to send error to main thread if possible
+                if let Ok(mut buf) = buffer.lock() {
+                    // Mark buffer as having an error by adding a sentinel value
+                    buf.push(f32::NAN);
+                }
             };
 
             let stream = build_stream(&device, &config, sample_format, buffer_clone, err_fn)?;
