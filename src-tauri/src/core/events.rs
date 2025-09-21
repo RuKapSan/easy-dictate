@@ -1,0 +1,92 @@
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager};
+
+use super::state::AppState;
+
+pub const EVENT_STATUS: &str = "transcription://status";
+pub const EVENT_PARTIAL: &str = "transcription://partial";
+pub const EVENT_COMPLETE: &str = "transcription://complete";
+
+#[derive(Clone, Copy, Debug)]
+pub enum StatusPhase {
+    Idle,
+    Recording,
+    Transcribing,
+    Success,
+    Error,
+}
+
+impl StatusPhase {
+    pub fn key(self) -> &'static str {
+        match self {
+            StatusPhase::Idle => "idle",
+            StatusPhase::Recording => "recording",
+            StatusPhase::Transcribing => "transcribing",
+            StatusPhase::Success => "success",
+            StatusPhase::Error => "error",
+        }
+    }
+
+    pub fn default_message(self) -> &'static str {
+        match self {
+            StatusPhase::Idle => "Ready. Use the global hotkey to start a recording.",
+            StatusPhase::Recording => "Listening... release the hotkey to stop.",
+            StatusPhase::Transcribing => "Transcribing audio...",
+            StatusPhase::Success => "Transcription complete.",
+            StatusPhase::Error => "Something went wrong.",
+        }
+    }
+
+    pub fn tray_label(self) -> &'static str {
+        match self {
+            StatusPhase::Idle => "Status: Idle",
+            StatusPhase::Recording => "Status: Recording",
+            StatusPhase::Transcribing => "Status: Transcribing",
+            StatusPhase::Success => "Status: Complete",
+            StatusPhase::Error => "Status: Error",
+        }
+    }
+}
+
+#[derive(Clone, Serialize)]
+struct StatusPayload<'a> {
+    phase: &'static str,
+    message: &'a str,
+}
+
+#[derive(Clone, Serialize)]
+struct TextPayload<'a> {
+    text: &'a str,
+}
+
+pub fn emit_status(app: &AppHandle, phase: StatusPhase, message: Option<&str>) {
+    let text = message.unwrap_or_else(|| phase.default_message());
+    app.emit(
+        EVENT_STATUS,
+        StatusPayload {
+            phase: phase.key(),
+            message: text,
+        },
+    )
+    .ok();
+
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Ok(guard) = state.tray_status_item().lock() {
+            if let Some(item) = guard.as_ref() {
+                item.set_text(phase.tray_label()).ok();
+            }
+        }
+    }
+}
+
+pub fn emit_partial(app: &AppHandle, text: &str) {
+    app.emit(EVENT_PARTIAL, TextPayload { text }).ok();
+}
+
+pub fn emit_complete(app: &AppHandle, text: &str) {
+    app.emit(EVENT_COMPLETE, TextPayload { text }).ok();
+}
+
+pub fn emit_error(app: &AppHandle, message: &str) {
+    emit_status(app, StatusPhase::Error, Some(message));
+}

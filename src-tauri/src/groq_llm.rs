@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::openai::TranscriptionJob;
+use crate::openai::RefinementRequest;
 
 #[derive(Clone)]
 pub struct GroqLLMClient {
@@ -42,52 +42,27 @@ impl GroqLLMClient {
     pub fn new() -> Result<Self> {
         let client = Client::builder()
             .build()
-            .context("Не удалось создать HTTP клиент для Groq LLM")?;
+            .context("Failed to build HTTP client for Groq LLM")?;
         let base_url = "https://api.groq.com/openai".to_string();
         Ok(Self { client, base_url })
     }
 
-    pub async fn refine_transcript(&self, text: String, job: &TranscriptionJob) -> Result<String> {
-        if !job.auto_translate
-            && !(job.use_custom_instructions && !job.custom_instructions.trim().is_empty())
-        {
-            return Ok(text);
+    pub async fn refine_transcript(&self, text: String, job: &RefinementRequest) -> Result<String> {
+        if text.trim().is_empty() {
+            return Ok(String::new());
         }
+
+        if job.api_key.trim().is_empty() {
+            return Err(anyhow!("Groq API key is required for post-processing"));
+        }
+
+        let Some(system_prompt) = job.system_prompt() else {
+            return Ok(text);
+        };
 
         let url = format!(
             "{}/v1/chat/completions",
             self.base_url.trim_end_matches('/')
-        );
-
-        let mut directives = Vec::new();
-        if job.auto_translate {
-            directives.push(format!(
-                "Сначала переведи текст на {} язык, сохранив естественный стиль и смысл.",
-                job.target_language
-            ));
-        } else {
-            directives.push(
-                "Сохрани язык исходного текста, если пользовательские инструкции не требуют иного."
-                    .to_string(),
-            );
-        }
-
-        let custom = job.custom_instructions.trim();
-        if job.use_custom_instructions && !custom.is_empty() {
-            directives.push(format!(
-                "Затем выполни следующие пользовательские инструкции: {}",
-                custom
-            ));
-        }
-
-        directives.push(
-            "Ответь только итоговым текстом без пояснений, кавычек и служебных сообщений."
-                .to_string(),
-        );
-
-        let system_prompt = format!(
-            "Ты помощник по постобработке диктовок. Выполни шаги последовательно. {}",
-            directives.join(" ")
         );
 
         let request = ChatRequest {
@@ -99,7 +74,7 @@ impl GroqLLMClient {
                 },
                 ChatMessage {
                     role: "user".to_string(),
-                    content: text,
+                    content: text.trim().to_string(),
                 },
             ],
             temperature: 0.3,
@@ -112,16 +87,16 @@ impl GroqLLMClient {
             .json(&request)
             .send()
             .await
-            .context("Ошибка запроса обработки текста к Groq LLM")?;
+            .context("Groq LLM refinement request failed")?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response
                 .text()
                 .await
-                .unwrap_or_else(|_| "<не удалось получить тело ответа>".into());
+                .unwrap_or_else(|_| "<failed to read error body>".into());
             return Err(anyhow!(
-                "Groq LLM вернул ошибку при обработке текста {}: {}",
+                "Groq LLM responded with {} to refinement request: {}",
                 status,
                 body
             ));
@@ -130,12 +105,12 @@ impl GroqLLMClient {
         let payload: ChatResponse = response
             .json()
             .await
-            .context("Не удалось прочитать ответ обработки текста от Groq LLM")?;
+            .context("Failed to parse Groq LLM refinement response")?;
 
         payload
             .choices
             .first()
             .map(|choice| choice.message.content.trim().to_string())
-            .ok_or_else(|| anyhow!("Пустой ответ от Groq LLM API"))
+            .ok_or_else(|| anyhow!("Groq LLM refinement response contained no choices"))
     }
 }

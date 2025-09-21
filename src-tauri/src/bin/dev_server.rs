@@ -1,4 +1,4 @@
-use std::{
+﻿use std::{
     fs,
     io::{Read, Write},
     net::TcpListener,
@@ -13,7 +13,7 @@ fn main() -> Result<()> {
     let root = resolve_root()?;
     let root = Arc::new(root);
     let addr = "127.0.0.1:1420";
-    let listener = TcpListener::bind(addr).context("Не удалось запустить локальный dev-сервер")?;
+    let listener = TcpListener::bind(addr).context("Failed to bind dev-server address")?;
     println!("Dev server listening on http://{addr}");
 
     for stream in listener.incoming() {
@@ -39,11 +39,14 @@ fn resolve_root() -> Result<PathBuf> {
         if candidate.exists() {
             return candidate
                 .canonicalize()
-                .with_context(|| format!("Не удалось вычислить путь к {:?}", candidate));
+                .with_context(|| format!("Failed to canonicalise path {candidate:?}"));
         }
     }
 
-    anyhow::bail!("Каталог frontend не найден (пробовали {:?})", candidates);
+    anyhow::bail!(
+        "Unable to locate frontend directory (looked in {:#?})",
+        candidates
+    );
 }
 
 fn handle_connection(stream: std::io::Result<std::net::TcpStream>, root: &Path) -> Result<()> {
@@ -84,7 +87,7 @@ fn handle_connection(stream: std::io::Result<std::net::TcpStream>, root: &Path) 
     let body = if method == "HEAD" {
         Vec::new()
     } else {
-        fs::read(&file_path).with_context(|| format!("Не удалось прочитать {:?}", file_path))?
+        fs::read(&file_path).with_context(|| format!("Failed to read {file_path:?}"))?
     };
 
     respond(&mut stream, 200, "OK", &body, mime)

@@ -1,38 +1,48 @@
-use std::{fs, path::PathBuf};
+use std::{collections::HashSet, path::PathBuf};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::fs as async_fs;
 
 const DEFAULT_HOTKEY: &str = "Ctrl+Shift+Space";
 const CONFIG_FILE: &str = "settings.json";
+const DEFAULT_MODEL: &str = "gpt-4o-transcribe";
+const DEFAULT_TARGET_LANGUAGE: &str = "English";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TranscriptionProvider {
+    #[default]
     OpenAI,
     Groq,
 }
 
-impl Default for TranscriptionProvider {
-    fn default() -> Self {
-        TranscriptionProvider::OpenAI
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LLMProvider {
+    #[default]
     OpenAI,
     Groq,
 }
 
-impl Default for LLMProvider {
-    fn default() -> Self {
-        LLMProvider::OpenAI
+impl TranscriptionProvider {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            TranscriptionProvider::OpenAI => "OpenAI",
+            TranscriptionProvider::Groq => "Groq",
+        }
     }
 }
 
+impl LLMProvider {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            LLMProvider::OpenAI => "OpenAI",
+            LLMProvider::Groq => "Groq",
+        }
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
@@ -59,18 +69,28 @@ impl Default for AppSettings {
             llm_provider: LLMProvider::OpenAI,
             api_key: String::new(),
             groq_api_key: String::new(),
-            model: "gpt-4o-transcribe".to_string(),
+            model: DEFAULT_MODEL.to_string(),
             hotkey: DEFAULT_HOTKEY.to_string(),
             simulate_typing: true,
             copy_to_clipboard: true,
             auto_start: false,
             use_streaming: true,
             auto_translate: false,
-            target_language: "русский".to_string(),
+            target_language: DEFAULT_TARGET_LANGUAGE.to_string(),
             use_custom_instructions: false,
             custom_instructions: String::new(),
         }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum SettingsValidationError {
+    #[error("A global hotkey must be set.")]
+    MissingHotkey,
+    #[error("Global hotkey '{0}' is not valid.")]
+    InvalidHotkey(String),
+    #[error("{0} API key is required.")]
+    MissingApiKey(&'static str),
 }
 
 impl AppSettings {
@@ -81,6 +101,27 @@ impl AppSettings {
         } else {
             candidate.replace("  ", " ")
         }
+    }
+
+    pub fn normalized(mut self) -> Self {
+        self.api_key = self.api_key.trim().to_string();
+        self.groq_api_key = self.groq_api_key.trim().to_string();
+        self.model = if self.model.trim().is_empty() {
+            DEFAULT_MODEL.to_string()
+        } else {
+            self.model.trim().to_string()
+        };
+        self.hotkey = self.normalized_hotkey();
+        self.target_language = if self.target_language.trim().is_empty() {
+            DEFAULT_TARGET_LANGUAGE.to_string()
+        } else {
+            self.target_language.trim().to_string()
+        };
+        self.custom_instructions = self.custom_instructions.trim().to_string();
+        if !self.use_custom_instructions || self.custom_instructions.is_empty() {
+            self.use_custom_instructions = false;
+        }
+        self
     }
 
     pub fn is_valid_hotkey(&self) -> bool {
@@ -94,36 +135,54 @@ impl AppSettings {
             return false;
         }
 
-        // Check if last part is a valid main key (not a modifier)
-        let main_key = parts.last().unwrap();
-        let modifiers = &parts[..parts.len()-1];
+        let main_key = parts.last().copied().unwrap_or("");
+        let modifiers = &parts[..parts.len() - 1];
 
-        // Valid main keys
-        let valid_main_keys = [
-            "Space", "Escape", "Enter", "Tab", "Backspace", "Delete",
-            "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "CapsLock",
-            "PageUp", "PageDown", "Home", "End", "Insert", "Pause",
-            "PrintScreen", "ScrollLock", "ContextMenu", "Backquote",
-            "Minus", "Equal", "BracketLeft", "BracketRight", "Backslash",
-            "Semicolon", "Quote", "Comma", "Period", "Slash"
-        ];
+        let mut valid_keys: HashSet<String> = [
+            "Space",
+            "Escape",
+            "Enter",
+            "Tab",
+            "Backspace",
+            "Delete",
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight",
+            "CapsLock",
+            "PageUp",
+            "PageDown",
+            "Home",
+            "End",
+            "Insert",
+            "Pause",
+            "PrintScreen",
+            "ScrollLock",
+            "ContextMenu",
+            "Backquote",
+            "Minus",
+            "Equal",
+            "BracketLeft",
+            "BracketRight",
+            "Backslash",
+            "Semicolon",
+            "Quote",
+            "Comma",
+            "Period",
+            "Slash",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
-        let valid_function_keys = (1..=24).map(|i| format!("F{i}")).collect::<Vec<_>>();
-        let valid_digit_keys = (0..=9).map(|i| i.to_string()).collect::<Vec<_>>();
-        let valid_letter_keys = (b'A'..=b'Z').map(|c| (c as char).to_string()).collect::<Vec<_>>();
+        valid_keys.extend((1..=24).map(|i| format!("F{i}")));
+        valid_keys.extend((0..=9).map(|i| i.to_string()));
+        valid_keys.extend((b'A'..=b'Z').map(|c| (c as char).to_string()));
 
-        let all_valid_keys = [
-            valid_main_keys.iter().map(|s| *s).collect::<Vec<_>>(),
-            valid_function_keys,
-            valid_digit_keys,
-            valid_letter_keys,
-        ].concat();
-
-        if !all_valid_keys.contains(&main_key) {
+        if !valid_keys.contains(main_key) {
             return false;
         }
 
-        // Check modifiers are valid
         let valid_modifiers = ["Ctrl", "Shift", "Alt", "Win"];
         for modifier in modifiers {
             if !valid_modifiers.contains(modifier) {
@@ -131,7 +190,6 @@ impl AppSettings {
             }
         }
 
-        // Must have at least one modifier or be a function key
         if modifiers.is_empty() && !main_key.starts_with('F') {
             return false;
         }
@@ -139,45 +197,43 @@ impl AppSettings {
         true
     }
 
-    pub fn sanitized(mut self) -> Self {
-        self.api_key = self.api_key.trim().to_string();
-        self.groq_api_key = self.groq_api_key.trim().to_string();
-        self.model = if self.model.trim().is_empty() {
-            "gpt-4o-transcribe".to_string()
-        } else {
-            self.model.trim().to_string()
-        };
-        self.hotkey = self.normalized_hotkey();
-        self.target_language = if self.target_language.trim().is_empty() {
-            "русский".to_string()
-        } else {
-            self.target_language.trim().to_string()
-        };
-        self.custom_instructions = self.custom_instructions.trim().to_string();
-        if self.use_custom_instructions && self.custom_instructions.is_empty() {
-            self.use_custom_instructions = false;
+    pub fn requires_llm(&self) -> bool {
+        self.auto_translate
+            || (self.use_custom_instructions && !self.custom_instructions.trim().is_empty())
+    }
+
+    pub fn validate(&self) -> Result<(), SettingsValidationError> {
+        let hotkey = self.normalized_hotkey();
+        if hotkey.is_empty() {
+            return Err(SettingsValidationError::MissingHotkey);
+        }
+        if !self.is_valid_hotkey() {
+            return Err(SettingsValidationError::InvalidHotkey(hotkey));
         }
 
-        // Validate API keys for selected providers
-        if self.provider == TranscriptionProvider::OpenAI && self.api_key.is_empty() {
-            return AppSettings::default();
-        }
-        if self.provider == TranscriptionProvider::Groq && self.groq_api_key.is_empty() {
-            return AppSettings::default();
-        }
-
-        // Validate LLM provider API keys if needed
-        let needs_llm = self.auto_translate || (self.use_custom_instructions && !self.custom_instructions.is_empty());
-        if needs_llm {
-            if self.llm_provider == LLMProvider::OpenAI && self.api_key.is_empty() {
-                return AppSettings::default();
+        match self.provider {
+            TranscriptionProvider::OpenAI if self.api_key.trim().is_empty() => {
+                return Err(SettingsValidationError::MissingApiKey("OpenAI"));
             }
-            if self.llm_provider == LLMProvider::Groq && self.groq_api_key.is_empty() {
-                return AppSettings::default();
+            TranscriptionProvider::Groq if self.groq_api_key.trim().is_empty() => {
+                return Err(SettingsValidationError::MissingApiKey("Groq"));
+            }
+            _ => {}
+        }
+
+        if self.requires_llm() {
+            match self.llm_provider {
+                LLMProvider::OpenAI if self.api_key.trim().is_empty() => {
+                    return Err(SettingsValidationError::MissingApiKey("OpenAI"));
+                }
+                LLMProvider::Groq if self.groq_api_key.trim().is_empty() => {
+                    return Err(SettingsValidationError::MissingApiKey("Groq"));
+                }
+                _ => {}
             }
         }
 
-        self
+        Ok(())
     }
 }
 
@@ -203,23 +259,30 @@ impl SettingsStore {
 
         let raw = async_fs::read(&path)
             .await
-            .with_context(|| format!("Не удалось прочитать {path:?}"))?;
-        let mut parsed: AppSettings = serde_json::from_slice(&raw)
-            .with_context(|| format!("Не удалось распарсить {path:?}"))?;
-        parsed = parsed.sanitized();
-        Ok(parsed)
+            .with_context(|| format!("Failed to read {path:?}"))?;
+        let parsed: AppSettings =
+            serde_json::from_slice(&raw).with_context(|| format!("Failed to parse {path:?}"))?;
+        Ok(parsed.normalized())
     }
 
     pub async fn save(&self, settings: &AppSettings) -> Result<()> {
         if !self.root.exists() {
-            async_fs::create_dir_all(&self.root).await.with_context(|| {
-                format!("Не удалось создать каталог {root:?}", root = self.root)
-            })?;
+            async_fs::create_dir_all(&self.root)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to create config directory {root:?}",
+                        root = self.root
+                    )
+                })?;
         }
-        let serialized =
-            serde_json::to_vec_pretty(settings).context("Ошибка сериализации настроек")?;
+
+        let normalized = settings.clone().normalized();
+        let serialized = serde_json::to_vec_pretty(&normalized)
+            .context("Failed to serialize settings to JSON")?;
+
         async_fs::write(self.file_path(), serialized)
             .await
-            .context("Ошибка записи настроек")
+            .context("Failed to write settings file")
     }
 }
