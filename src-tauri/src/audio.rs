@@ -49,11 +49,12 @@ impl Recorder {
             let max_samples = (sample_rate as usize) * channels * 120; // 2 minutes max
             let buffer = Arc::new(Mutex::new(Vec::<f32>::with_capacity(max_samples)));
             let buffer_clone = buffer.clone();
+            let buffer_for_err = buffer.clone();
 
-            let err_fn = |err| {
+            let err_fn = move |err| {
                 eprintln!("Ошибка потока записи: {err}");
                 // Try to send error to main thread if possible
-                if let Ok(mut buf) = buffer.lock() {
+                if let Ok(mut buf) = buffer_for_err.lock() {
                     // Mark buffer as having an error by adding a sentinel value
                     buf.push(f32::NAN);
                 }

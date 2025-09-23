@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -7,7 +7,7 @@ use tokio::fs as async_fs;
 const DEFAULT_HOTKEY: &str = "Ctrl+Shift+Space";
 const CONFIG_FILE: &str = "settings.json";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum TranscriptionProvider {
     OpenAI,
@@ -20,7 +20,7 @@ impl Default for TranscriptionProvider {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum LLMProvider {
     OpenAI,
@@ -114,9 +114,9 @@ impl AppSettings {
 
         let all_valid_keys = [
             valid_main_keys.iter().map(|s| *s).collect::<Vec<_>>(),
-            valid_function_keys,
-            valid_digit_keys,
-            valid_letter_keys,
+            valid_function_keys.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            valid_digit_keys.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            valid_letter_keys.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
         ].concat();
 
         if !all_valid_keys.contains(&main_key) {
