@@ -1,5 +1,6 @@
 use anyhow::Result;
 use tauri::{
+    image::Image,
     menu::{MenuBuilder, MenuItem, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager,
@@ -21,10 +22,20 @@ pub fn install_tray(app: &AppHandle) -> Result<MenuItem<tauri::Wry>> {
         .build()?;
 
     let handle = app.clone();
-    TrayIconBuilder::with_id("main")
+
+    // Load tray icon from embedded resources
+    let icon_bytes = include_bytes!("../../icons/32x32.png");
+
+    let mut tray_builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
-        .tooltip("Easy Dictate")
-        .on_tray_icon_event(move |_tray, event| match event {
+        .tooltip("Easy Dictate");
+
+    // Create icon from PNG bytes
+    if let Some(icon_image) = Image::from_bytes(icon_bytes).ok() {
+        tray_builder = tray_builder.icon(icon_image);
+    }
+
+    tray_builder.on_tray_icon_event(move |_tray, event| match event {
             TrayIconEvent::Click {
                 button,
                 button_state,

@@ -329,17 +329,3 @@ footer {
   color: var(--text-muted);
   font-size: 0.85rem;
 }
-
-.hint {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-left: 0.25rem;
-}
-
-.llm-provider {
-  margin-left: 2rem;
-}
-
-.llm-provider select {
-  margin-left: 0.5rem;
-}

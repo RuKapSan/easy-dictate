@@ -41,10 +41,18 @@ pub fn run() {
             let state = AppState::new(store, initial.clone())?;
             app.manage(state);
 
+            // Check if app is starting with the system (autostart)
+            let is_autostart = std::env::args().any(|arg| arg == "--autostart" || arg == "--minimized");
+
             if let Some(window) = handle.get_webview_window("main") {
-                window.show().ok();
-                window.unminimize().ok();
-                window.set_focus().ok();
+                if !is_autostart {
+                    window.show().ok();
+                    window.unminimize().ok();
+                    window.set_focus().ok();
+                } else {
+                    // Keep window hidden when starting with the system
+                    window.hide().ok();
+                }
             }
 
             commands::apply_autostart(handle, initial.auto_start).ok();

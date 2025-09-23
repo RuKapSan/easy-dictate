@@ -14,10 +14,12 @@
       {
         "title": "Easy Dictate",
         "width": 640,
-        "height": 720,
-        "resizable": false,
+        "height": 800,
+        "minHeight": 600,
+        "maxHeight": 1280,
+        "resizable": true,
         "fullscreen": false,
-        "visible": true,
+        "visible": false,
         "skipTaskbar": false
       }
     ],

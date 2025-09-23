@@ -1,5 +1,5 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,126 +10,124 @@
   <main>
     <header>
       <h1>Easy Dictate</h1>
-      <p class="subtitle">Dictate text into any application with a single global hotkey.</p>
+      <p class="subtitle">Голосовое диктование в любой программе</p>
     </header>
 
     <section class="card" id="statusCard">
-      <h2>Current Status</h2>
+      <h2>Статус</h2>
       <div class="status-line">
-        <span id="status-indicator" class="pill idle">Idle</span>
-        <span id="status-text">Ready. Use the global hotkey to start a recording.</span>
+        <span id="status-indicator" class="pill idle">Ожидает</span>
+        <span id="status-text">Готово к записи по горячей клавише.</span>
       </div>
       <progress id="progress" max="1" value="0" hidden></progress>
       <pre id="last-result" class="result" hidden></pre>
     </section>
 
     <section class="card">
-      <h2>Preferences</h2>
+      <h2>Настройки</h2>
       <form id="settings-form">
         <label>
-          Speech-to-text provider
+          Провайдер
           <select id="provider">
             <option value="openai">OpenAI</option>
-            <option value="groq">Groq</option>
+            <option value="groq" selected>Groq</option>
           </select>
         </label>
         <label id="openai-api-key-label">
-          OpenAI API key <span id="openai-api-hint" class="hint"></span>
+          API ключ OpenAI <span id="openai-api-hint" style="font-size: 0.85em; color: #666;"></span>
           <input type="password" id="apiKey" autocomplete="off" placeholder="sk-..." />
         </label>
         <label id="groq-api-key-label" hidden>
-          Groq API key
+          API ключ Groq
           <input type="password" id="groqApiKey" autocomplete="off" placeholder="gsk_..." />
         </label>
         <label>
-          Model
+          Модель
           <select id="model">
             <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
             <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
             <option value="whisper-1">whisper-1 (fallback)</option>
-            <option value="groq/whisper-large-v3-turbo">Groq Whisper Large v3 Turbo</option>
+            <option value="groq/whisper-large-v3-turbo" selected>Groq Whisper Large v3 Turbo</option>
             <option value="groq/whisper-large-v3">Groq Whisper Large v3</option>
           </select>
         </label>
         <label class="hotkey-label">
-          Global hotkey
+          Горячая клавиша
           <div class="hotkey-row">
-            <button type="button" id="startHotkeyCapture">Record hotkey</button>
+            <button type="button" id="startHotkeyCapture">Записать сочетание</button>
             <span
               id="hotkeyDisplay"
-              data-placeholder="Press Record to capture a hotkey"
+              data-placeholder="Комбинация не задана"
               data-empty="true"
-            >Press Record to capture a hotkey</span>
+            >Комбинация не задана</span>
             <input type="hidden" id="hotkey" />
           </div>
-          <small class="hotkey-hint">Hotkeys must include at least one modifier (Ctrl, Shift, Alt, or Win). Mouse buttons are not supported.</small>
+          <small class="hotkey-hint">Нажмите «Записать сочетание», затем удерживайте нужные клавиши или кнопку мыши.</small>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="simulateTyping" />
-          <span>Type the result in the active application</span>
+          <span>Набирать текст по символам через эмуляцию клавиатуры</span>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="copyToClipboard" />
-          <span>Copy the transcription to the clipboard</span>
+          <span>Дублировать результат в буфер обмена</span>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="autoStart" />
-          <span>Launch with the operating system</span>
+          <span>Запускать вместе с системой</span>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="useStreaming" checked />
-          <span>Show the final transcript as soon as it is ready</span>
+          <span>Показывать текст по мере распознавания (если поддерживается)</span>
         </label>
         <label class="switch-row translate-row">
           <input type="checkbox" id="autoTranslate" />
           <span class="switch-text">
-            <span class="switch-title">Translate automatically</span>
-            <span class="switch-hint">Requires a language model provider. Text is translated after transcription.</span>
+            <span class="switch-title">Переводить результат</span>
+            <span class="switch-hint">Автоматически переводить текст на выбранный язык</span>
           </span>
           <select id="targetLanguage" class="inline-select">
-            <option value="English">English</option>
-            <option value="Ukrainian">Ukrainian</option>
-            <option value="Spanish">Spanish</option>
+            <option value="русский">На русский</option>
+            <option value="английский">На английский</option>
           </select>
         </label>
-        <label id="llm-provider-label" hidden class="llm-provider">
-          Language model provider
-          <select id="llmProvider">
+        <label id="llm-provider-label" hidden style="margin-left: 2rem;">
+          LLM для обработки
+          <select id="llmProvider" style="margin-left: 0.5rem;">
             <option value="openai">OpenAI GPT-4o-mini</option>
-            <option value="groq">Groq OSS-20B</option>
+            <option value="groq" selected>Groq OSS-20B</option>
           </select>
         </label>
         <label class="switch-row custom-instructions-toggle">
           <input type="checkbox" id="useCustomInstructions" />
           <span class="switch-text">
-            <span class="switch-title">Apply custom instructions</span>
-            <span class="switch-hint">Optional Markdown guidance for the language model.</span>
+            <span class="switch-title">Применять свои инструкции</span>
+            <span class="switch-hint">Например: «Сделай краткое резюме в Markdown»</span>
           </span>
         </label>
         <label class="custom-instructions-field" id="customInstructionsWrapper" hidden>
-          Custom instructions
+          Свои инструкции
           <textarea
             id="customInstructions"
             rows="3"
-            placeholder="Example: Translate to English and return bullet points."
+            placeholder="Опишите, как доработать распознанный текст"
           ></textarea>
-          <small class="field-hint">Instructions are only used when the toggle above is enabled.</small>
+          <small class="field-hint">Инструкции выполняются после распознавания и перевода (если включён). Оставьте поле пустым, чтобы использовать исходный результат.</small>
         </label>
         <div class="actions">
-          <button type="submit" id="saveBtn">Save</button>
-          <button type="button" id="revertBtn">Reset</button>
+          <button type="submit" id="saveBtn">Сохранить</button>
+          <button type="button" id="revertBtn">Отменить</button>
         </div>
       </form>
     </section>
 
     <footer>
-      <p>Version <span id="app-version">-</span></p>
+      <p>Версия <span id="app-version">-</span></p>
     </footer>
   </main>
 
   <div id="toast" hidden></div>
 
-  <script type="module" src="main.js"></script>
+  <script src="main.js" defer></script>
 </body>
 </html>
-
