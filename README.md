@@ -30,7 +30,7 @@ Easy Dictate — это десктопное приложение для тра�
 
 ```bash
 # Клонирование репозитория
-git clone https://github.com/yourusername/easy-dictate.git
+git clone https://github.com/RuKapSan/easy-dictate.git
 cd easy-dictate
 
 # Установка зависимостей
