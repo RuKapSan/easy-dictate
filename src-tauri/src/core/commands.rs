@@ -297,6 +297,8 @@ pub async fn show_overlay_no_focus(app: AppHandle) -> Result<(), String> {
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
                     );
                 }
+                // Enable click-through AFTER showing to ensure it renders correctly
+                window.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
             } else {
                 log::warn!("[Commands] Failed to get HWND for overlay, falling back to standard show");
                 window.show().map_err(|e| e.to_string())?;

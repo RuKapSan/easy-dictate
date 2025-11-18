@@ -29,7 +29,7 @@
         "alwaysOnTop": true,
         "decorations": false,
         "skipTaskbar": true,
-        "visible": true,
+        "visible": false,
         "width": 800,
         "height": 200,
         "center": true,

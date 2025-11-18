@@ -23,9 +23,7 @@ async function showOverlay() {
         animationTimeout = null;
     }
     container.classList.remove('hidden');
-    log("Showing overlay window");
-    // Use custom command to show without stealing focus
-    await window.__TAURI__.core.invoke('show_overlay_no_focus');
+    log("Showing overlay (CSS)");
 }
 
 function hideOverlay(delay = 2000) {
@@ -34,12 +32,7 @@ function hideOverlay(delay = 2000) {
 
     hideTimeout = setTimeout(async () => {
         container.classList.add('hidden');
-        // Wait for animation to finish before hiding window
-        animationTimeout = setTimeout(() => {
-            log("Hiding overlay window (system)");
-            appWindow.hide();
-            animationTimeout = null;
-        }, 300);
+        log("Hiding overlay (CSS)");
     }, delay);
 }
 
@@ -58,10 +51,8 @@ function setStatus(status) {
 
 async function init() {
     log("Overlay initialized");
-    // Ensure window is hidden on startup (since we set visible: true in config)
-    // appWindow.hide();
-    // Enable click-through
-    // await appWindow.setIgnoreCursorEvents(true);
+    // Window management is now handled in Rust setup (always visible, click-through, no focus)
+    // We only toggle CSS classes here.
 
     // Listen for status changes
     await listen('transcription://status', (event) => {
