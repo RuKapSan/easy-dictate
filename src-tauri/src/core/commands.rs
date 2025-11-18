@@ -269,3 +269,44 @@ pub async fn elevenlabs_streaming_is_connected(
 ) -> Result<bool, String> {
     Ok(state.elevenlabs_streaming().is_connected().await)
 }
+
+#[tauri::command]
+pub async fn show_overlay_no_focus(app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    
+    if let Some(window) = app.get_webview_window("overlay") {
+        // Ensure click-through is enabled before showing
+        // window.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
+
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::Foundation::HWND;
+            use windows::Win32::UI::WindowsAndMessaging::{
+                SetWindowPos, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE, SWP_SHOWWINDOW
+            };
+
+            if let Ok(hwnd) = window.hwnd() {
+                let hwnd = HWND(hwnd.0 as _);
+                log::info!("[Commands] Showing overlay without focus (HWND: {:?})", hwnd);
+                unsafe {
+                    // Show window without activating and ensure it's top most
+                    let _ = SetWindowPos(
+                        hwnd, 
+                        Some(HWND_TOPMOST), 
+                        0, 0, 0, 0, 
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+                    );
+                }
+            } else {
+                log::warn!("[Commands] Failed to get HWND for overlay, falling back to standard show");
+                window.show().map_err(|e| e.to_string())?;
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            window.show().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}

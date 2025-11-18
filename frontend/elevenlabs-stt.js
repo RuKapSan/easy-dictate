@@ -207,8 +207,21 @@ function setupElevenLabsEventListeners() {
   });
 
   // Auto-reconnect on connection close
-  listen("elevenlabs://connection-closed", () => {
-    log("Connection closed by server. Attempting to reconnect in 3s...", "warn");
+  listen("elevenlabs://connection-closed", (event) => {
+    const payload = event.payload || {};
+    const code = payload.code;
+    const reason = payload.reason;
+
+    log(`Connection closed. Code: ${code}, Reason: ${reason}`, "info");
+
+    // 1000 = Normal Closure
+    if (code === 1000) {
+      log("Normal closure detected. Not reconnecting.", "info");
+      isConnected = false;
+      return;
+    }
+
+    log("Connection closed unexpectedly. Attempting to reconnect in 3s...", "warn");
     isConnected = false;
     setTimeout(() => {
       if (currentProvider === "elevenlabs" && lastApiKey) {

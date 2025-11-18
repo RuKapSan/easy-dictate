@@ -98,6 +98,7 @@ pub fn run() {
             core::commands::elevenlabs_streaming_close_gate,
             core::commands::elevenlabs_streaming_send_chunk,
             core::commands::elevenlabs_streaming_is_connected,
+            core::commands::show_overlay_no_focus,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

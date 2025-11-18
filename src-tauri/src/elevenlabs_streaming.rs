@@ -69,6 +69,12 @@ struct ErrorEvent {
     error: String,
 }
 
+#[derive(Serialize, Clone)]
+struct ConnectionClosedEvent {
+    code: u16,
+    reason: String,
+}
+
 impl ElevenLabsStreamingClient {
     pub fn new() -> Self {
         Self {
@@ -332,7 +338,16 @@ async fn message_reader_task(
                     }
                     Some(Ok(Message::Close(frame))) => {
                         log::info!("[ElevenLabs] WebSocket closed: {:?}", frame);
-                        let _ = app_handle.emit("elevenlabs://connection-closed", ());
+                        let (code, reason) = if let Some(f) = frame {
+                            (u16::from(f.code), f.reason.to_string())
+                        } else {
+                            (1005, "".to_string()) // 1005 = No Status Received
+                        };
+                        
+                        let _ = app_handle.emit("elevenlabs://connection-closed", ConnectionClosedEvent {
+                            code,
+                            reason,
+                        });
                         break;
                     }
                     Some(Ok(Message::Pong(_))) => {

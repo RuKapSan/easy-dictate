@@ -24,8 +24,8 @@ async function showOverlay() {
     }
     container.classList.remove('hidden');
     log("Showing overlay window");
-    await appWindow.show();
-    await appWindow.setFocus();
+    // Use custom command to show without stealing focus
+    await window.__TAURI__.core.invoke('show_overlay_no_focus');
 }
 
 function hideOverlay(delay = 2000) {
@@ -59,7 +59,9 @@ function setStatus(status) {
 async function init() {
     log("Overlay initialized");
     // Ensure window is hidden on startup (since we set visible: true in config)
-    appWindow.hide();
+    // appWindow.hide();
+    // Enable click-through
+    // await appWindow.setIgnoreCursorEvents(true);
 
     // Listen for status changes
     await listen('transcription://status', (event) => {
