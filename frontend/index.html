@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Easy Dictate</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
   <main>
     <header>
@@ -31,6 +33,7 @@
           <select id="provider">
             <option value="openai">OpenAI</option>
             <option value="groq" selected>Groq</option>
+            <option value="elevenlabs">ElevenLabs</option>
           </select>
         </label>
         <label id="openai-api-key-label">
@@ -40,6 +43,10 @@
         <label id="groq-api-key-label" hidden>
           API ключ Groq
           <input type="password" id="groqApiKey" autocomplete="off" placeholder="gsk_..." />
+        </label>
+        <label id="elevenlabs-api-key-label" hidden>
+          API ключ ElevenLabs
+          <input type="password" id="elevenlabsApiKey" autocomplete="off" placeholder="sk_..." />
         </label>
         <label>
           Модель
@@ -55,14 +62,12 @@
           Горячая клавиша
           <div class="hotkey-row">
             <button type="button" id="startHotkeyCapture">Записать сочетание</button>
-            <span
-              id="hotkeyDisplay"
-              data-placeholder="Комбинация не задана"
-              data-empty="true"
-            >Комбинация не задана</span>
+            <span id="hotkeyDisplay" data-placeholder="Комбинация не задана" data-empty="true">Комбинация не
+              задана</span>
             <input type="hidden" id="hotkey" />
           </div>
-          <small class="hotkey-hint">Нажмите «Записать сочетание», затем удерживайте нужные клавиши или кнопку мыши.</small>
+          <small class="hotkey-hint">Нажмите «Записать сочетание», затем удерживайте нужные клавиши или кнопку
+            мыши.</small>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="simulateTyping" />
@@ -107,12 +112,10 @@
         </label>
         <label class="custom-instructions-field" id="customInstructionsWrapper" hidden>
           Свои инструкции
-          <textarea
-            id="customInstructions"
-            rows="3"
-            placeholder="Опишите, как доработать распознанный текст"
-          ></textarea>
-          <small class="field-hint">Инструкции выполняются после распознавания и перевода (если включён). Оставьте поле пустым, чтобы использовать исходный результат.</small>
+          <textarea id="customInstructions" rows="3"
+            placeholder="Опишите, как доработать распознанный текст"></textarea>
+          <small class="field-hint">Инструкции выполняются после распознавания и перевода (если включён). Оставьте поле
+            пустым, чтобы использовать исходный результат.</small>
         </label>
         <div class="actions">
           <button type="submit" id="saveBtn">Сохранить</button>
@@ -128,6 +131,8 @@
 
   <div id="toast" hidden></div>
 
+  <script src="elevenlabs-stt.js" defer></script>
   <script src="main.js" defer></script>
 </body>
+
 </html>

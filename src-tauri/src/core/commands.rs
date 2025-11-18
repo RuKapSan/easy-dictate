@@ -87,3 +87,185 @@ pub(crate) fn apply_autostart(app: &AppHandle, should_enable: bool) -> Result<()
         Ok(())
     }
 }
+
+// ============================================================================
+// ElevenLabs Gated Streaming Commands
+// ============================================================================
+
+#[tauri::command]
+pub async fn elevenlabs_streaming_connect(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    api_key: String,
+    sample_rate: u32,
+    language_code: String,
+) -> Result<(), String> {
+    // 1. Connect to WebSocket
+    state
+        .elevenlabs_streaming()
+        .connect(api_key, sample_rate, language_code, app.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. Spawn dedicated thread for audio streaming (CPAL Stream is !Send)
+    let cancel_token = tokio_util::sync::CancellationToken::new();
+    let cancel_clone = cancel_token.clone();
+    let streaming_client = state.elevenlabs_streaming().clone();
+
+    std::thread::spawn(move || {
+        use crate::audio_stream::ContinuousAudioCapture;
+
+        // Create audio capture on this thread
+        let mut audio_capture = match ContinuousAudioCapture::new() {
+            Ok(capture) => capture,
+            Err(e) => {
+                log::error!("[AudioStreaming] Failed to create audio capture: {}", e);
+                return;
+            }
+        };
+
+        // Start audio capture
+        let audio_rx = match audio_capture.start() {
+            Ok(rx) => rx,
+            Err(e) => {
+                log::error!("[AudioStreaming] Failed to start audio capture: {}", e);
+                return;
+            }
+        };
+
+        let sample_rate = audio_capture.sample_rate();
+        log::info!("[AudioStreaming] Audio capture started: {} Hz", sample_rate);
+
+        // Create tokio runtime for async operations on this thread
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(e) => {
+                log::error!("[AudioStreaming] Failed to create runtime: {}", e);
+                return;
+            }
+        };
+
+        // Run streaming task
+        rt.block_on(async move {
+            audio_streaming_task(audio_rx, audio_capture, streaming_client, cancel_clone).await;
+        });
+    });
+
+    // Store cancellation token
+    let mut cancel_guard = state
+        .audio_streaming_cancel()
+        .lock()
+        .map_err(|_| "Failed to lock cancel token".to_string())?;
+    *cancel_guard = Some(cancel_token);
+
+    log::info!("[Commands] ElevenLabs streaming connected and audio pipeline started");
+
+    Ok(())
+}
+
+/// Background task that manages audio capture and forwards chunks to ElevenLabs WebSocket
+async fn audio_streaming_task(
+    mut audio_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+    mut audio_capture: crate::audio_stream::ContinuousAudioCapture,
+    streaming_client: crate::elevenlabs_streaming::ElevenLabsStreamingClient,
+    cancel_token: tokio_util::sync::CancellationToken,
+) {
+    log::info!("[AudioStreaming] Task started");
+
+    loop {
+        tokio::select! {
+            _ = cancel_token.cancelled() => {
+                log::info!("[AudioStreaming] Task cancelled, stopping audio capture");
+                let _ = audio_capture.stop();
+                break;
+            }
+            chunk = audio_rx.recv() => {
+                match chunk {
+                    Some(pcm_data) => {
+                        // Send chunk to streaming client (will check gate internally)
+                        if let Err(e) = streaming_client.send_audio_chunk(pcm_data).await {
+                            log::error!("[AudioStreaming] Failed to send chunk: {}", e);
+                            // If connection is dead or other fatal error, stop the loop
+                            if e.to_string().contains("Connection is dead") || e.to_string().contains("closed") {
+                                break;
+                            }
+                        }
+                    }
+                    None => {
+                        log::info!("[AudioStreaming] Audio stream ended");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    log::info!("[AudioStreaming] Task finished");
+}
+
+#[tauri::command]
+pub async fn elevenlabs_streaming_disconnect(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("[Commands] Disconnecting ElevenLabs streaming...");
+
+    // 1. Cancel audio streaming task (which will stop audio capture)
+    if let Ok(mut cancel_guard) = state.audio_streaming_cancel().lock() {
+        if let Some(token) = cancel_guard.take() {
+            token.cancel();
+            log::info!("[Commands] Audio streaming task cancelled");
+        }
+    }
+
+    // 2. Disconnect WebSocket
+    state
+        .elevenlabs_streaming()
+        .disconnect()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[Commands] ElevenLabs streaming disconnected");
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn elevenlabs_streaming_open_gate(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .elevenlabs_streaming()
+        .open_gate()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn elevenlabs_streaming_close_gate(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .elevenlabs_streaming()
+        .close_gate_and_commit()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn elevenlabs_streaming_send_chunk(
+    state: State<'_, AppState>,
+    pcm_data: Vec<u8>,
+) -> Result<(), String> {
+    state
+        .elevenlabs_streaming()
+        .send_audio_chunk(pcm_data)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn elevenlabs_streaming_is_connected(
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    Ok(state.elevenlabs_streaming().is_connected().await)
+}

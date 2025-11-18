@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use anyhow::{anyhow, Result};
-use enigo::{Enigo, Keyboard, Settings};
+use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
 #[derive(Default)]
 pub struct KeyboardController {
@@ -36,6 +36,33 @@ impl KeyboardController {
             enigo
                 .text(text)
                 .map_err(|e| anyhow!("Не удалось ввести текст: {e}"))?
+        } else {
+            return Err(anyhow!("Эмулятор клавиатуры не инициализирован"));
+        }
+        Ok(())
+    }
+
+    pub fn paste(&self) -> Result<()> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("Не удалось захватить эмулятор клавиатуры"))?;
+        if guard.is_none() {
+            *guard = Some(
+                Enigo::new(&self.settings)
+                    .map_err(|e| anyhow!("Ошибка инициализации эмулятора: {e}"))?,
+            );
+        }
+        if let Some(enigo) = guard.as_mut() {
+            enigo
+                .key(Key::Control, Direction::Press)
+                .map_err(|e| anyhow!("Не удалось нажать Ctrl: {e}"))?;
+            enigo
+                .key(Key::Unicode('v'), Direction::Click)
+                .map_err(|e| anyhow!("Не удалось нажать V: {e}"))?;
+            enigo
+                .key(Key::Control, Direction::Release)
+                .map_err(|e| anyhow!("Не удалось отпустить Ctrl: {e}"))?;
         } else {
             return Err(anyhow!("Эмулятор клавиатуры не инициализирован"));
         }

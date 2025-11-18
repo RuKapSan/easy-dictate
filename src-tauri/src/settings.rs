@@ -16,6 +16,7 @@ pub enum TranscriptionProvider {
     #[default]
     OpenAI,
     Groq,
+    ElevenLabs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -31,6 +32,7 @@ impl TranscriptionProvider {
         match self {
             TranscriptionProvider::OpenAI => "OpenAI",
             TranscriptionProvider::Groq => "Groq",
+            TranscriptionProvider::ElevenLabs => "ElevenLabs",
         }
     }
 }
@@ -50,6 +52,7 @@ pub struct AppSettings {
     pub llm_provider: LLMProvider,
     pub api_key: String,
     pub groq_api_key: String,
+    pub elevenlabs_api_key: String,
     pub model: String,
     pub hotkey: String,
     pub simulate_typing: bool,
@@ -69,6 +72,7 @@ impl Default for AppSettings {
             llm_provider: LLMProvider::OpenAI,
             api_key: String::new(),
             groq_api_key: String::new(),
+            elevenlabs_api_key: String::new(),
             model: DEFAULT_MODEL.to_string(),
             hotkey: DEFAULT_HOTKEY.to_string(),
             simulate_typing: true,

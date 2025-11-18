@@ -1,0 +1,64 @@
+{
+    "permission": [
+        {
+            "identifier": "allow-elevenlabs-streaming-connect",
+            "description": "Connect to ElevenLabs streaming API",
+            "commands": {
+                "allow": [
+                    "elevenlabs_streaming_connect"
+                ],
+                "deny": []
+            }
+        },
+        {
+            "identifier": "allow-elevenlabs-streaming-disconnect",
+            "description": "Disconnect from ElevenLabs streaming API",
+            "commands": {
+                "allow": [
+                    "elevenlabs_streaming_disconnect"
+                ],
+                "deny": []
+            }
+        },
+        {
+            "identifier": "allow-elevenlabs-streaming-open-gate",
+            "description": "Open audio streaming gate",
+            "commands": {
+                "allow": [
+                    "elevenlabs_streaming_open_gate"
+                ],
+                "deny": []
+            }
+        },
+        {
+            "identifier": "allow-elevenlabs-streaming-close-gate",
+            "description": "Close audio streaming gate",
+            "commands": {
+                "allow": [
+                    "elevenlabs_streaming_close_gate"
+                ],
+                "deny": []
+            }
+        },
+        {
+            "identifier": "allow-elevenlabs-streaming-send-chunk",
+            "description": "Send audio chunk to ElevenLabs",
+            "commands": {
+                "allow": [
+                    "elevenlabs_streaming_send_chunk"
+                ],
+                "deny": []
+            }
+        },
+        {
+            "identifier": "allow-elevenlabs-streaming-is-connected",
+            "description": "Check if ElevenLabs streaming is connected",
+            "commands": {
+                "allow": [
+                    "elevenlabs_streaming_is_connected"
+                ],
+                "deny": []
+            }
+        }
+    ]
+}

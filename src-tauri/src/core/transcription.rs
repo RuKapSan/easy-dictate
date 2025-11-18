@@ -5,6 +5,7 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt as _;
 
 use crate::{
+    elevenlabs::{ElevenLabsClient, ElevenLabsTranscriptionRequest},
     groq::GroqClient,
     groq_llm::GroqLLMClient,
     input::KeyboardController,
@@ -22,6 +23,7 @@ pub struct TranscriptionService {
     openai: OpenAiClient,
     groq: GroqClient,
     groq_llm: GroqLLMClient,
+    elevenlabs: ElevenLabsClient,
     keyboard: Arc<KeyboardController>,
 }
 
@@ -30,12 +32,14 @@ impl TranscriptionService {
         openai: OpenAiClient,
         groq: GroqClient,
         groq_llm: GroqLLMClient,
+        elevenlabs: ElevenLabsClient,
         keyboard: Arc<KeyboardController>,
     ) -> Self {
         Self {
             openai,
             groq,
             groq_llm,
+            elevenlabs,
             keyboard,
         }
     }
@@ -48,6 +52,7 @@ impl TranscriptionService {
         let transcription_api_key = match settings.provider {
             TranscriptionProvider::OpenAI => settings.api_key.trim().to_string(),
             TranscriptionProvider::Groq => settings.groq_api_key.trim().to_string(),
+            TranscriptionProvider::ElevenLabs => settings.elevenlabs_api_key.trim().to_string(),
         };
 
         if transcription_api_key.is_empty() {
@@ -58,15 +63,28 @@ impl TranscriptionService {
             ));
         }
 
-        let request = TranscriptionRequest {
-            api_key: transcription_api_key,
-            model: settings.model.clone(),
-            audio_wav,
-        };
-
         let mut text = match settings.provider {
-            TranscriptionProvider::OpenAI => self.openai.transcribe(request).await?,
-            TranscriptionProvider::Groq => self.groq.transcribe(request).await?,
+            TranscriptionProvider::OpenAI | TranscriptionProvider::Groq => {
+                let request = TranscriptionRequest {
+                    api_key: transcription_api_key,
+                    model: settings.model.clone(),
+                    audio_wav,
+                };
+
+                match settings.provider {
+                    TranscriptionProvider::OpenAI => self.openai.transcribe(request).await?,
+                    TranscriptionProvider::Groq => self.groq.transcribe(request).await?,
+                    _ => unreachable!(),
+                }
+            }
+            TranscriptionProvider::ElevenLabs => {
+                let el_request = ElevenLabsTranscriptionRequest {
+                    api_key: transcription_api_key,
+                    audio_wav,
+                    language: String::new(),
+                };
+                self.elevenlabs.transcribe(el_request).await?
+            }
         };
 
         if !text.trim().is_empty() && settings.requires_llm() {

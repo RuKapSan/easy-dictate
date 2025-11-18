@@ -6,6 +6,8 @@ use tokio::sync::RwLock;
 
 use crate::{
     audio::{Recorder, RecordingSession},
+    elevenlabs::ElevenLabsClient,
+    elevenlabs_streaming::ElevenLabsStreamingClient,
     groq::GroqClient,
     groq_llm::GroqLLMClient,
     input::KeyboardController,
@@ -21,6 +23,8 @@ pub struct AppState {
     recorder: Recorder,
     active_recording: Mutex<Option<RecordingSession>>,
     transcription: TranscriptionService,
+    elevenlabs_streaming: ElevenLabsStreamingClient,
+    audio_streaming_cancel: Mutex<Option<tokio_util::sync::CancellationToken>>,
     is_transcribing: AtomicBool,
     tray_status_item: Mutex<Option<MenuItem<tauri::Wry>>>,
 }
@@ -33,8 +37,11 @@ impl AppState {
             OpenAiClient::new()?,
             GroqClient::new()?,
             GroqLLMClient::new()?,
+            ElevenLabsClient::new()?,
             keyboard,
         );
+
+        let elevenlabs_streaming = ElevenLabsStreamingClient::new();
 
         Ok(Self {
             settings_store,
@@ -42,6 +49,8 @@ impl AppState {
             recorder,
             active_recording: Mutex::new(None),
             transcription,
+            elevenlabs_streaming,
+            audio_streaming_cancel: Mutex::new(None),
             is_transcribing: AtomicBool::new(false),
             tray_status_item: Mutex::new(None),
         })
@@ -77,5 +86,13 @@ impl AppState {
 
     pub fn tray_status_item(&self) -> &Mutex<Option<MenuItem<tauri::Wry>>> {
         &self.tray_status_item
+    }
+
+    pub fn elevenlabs_streaming(&self) -> &ElevenLabsStreamingClient {
+        &self.elevenlabs_streaming
+    }
+
+    pub fn audio_streaming_cancel(&self) -> &Mutex<Option<tokio_util::sync::CancellationToken>> {
+        &self.audio_streaming_cancel
     }
 }

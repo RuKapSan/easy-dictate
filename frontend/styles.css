@@ -307,6 +307,12 @@ progress::-webkit-progress-value { background: var(--accent); }
   white-space: pre-wrap;
 }
 
+.result.partial {
+  color: var(--text-muted);
+  font-style: italic;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
 #toast {
   position: fixed;
   bottom: 24px;

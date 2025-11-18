@@ -2,7 +2,11 @@ use anyhow::anyhow;
 use tauri::{Manager, RunEvent};
 
 mod audio;
+mod audio_stream;
 mod core;
+mod elevenlabs;
+mod elevenlabs_handler;
+mod elevenlabs_streaming;
 mod groq;
 mod groq_llm;
 mod input;
@@ -66,6 +70,9 @@ pub fn run() {
                 }
             }
 
+            // Setup ElevenLabs streaming event handlers
+            elevenlabs_handler::setup_elevenlabs_event_handlers(handle);
+
             handle.on_menu_event(|app_handle, event| match event.id().as_ref() {
                 "open" => tray::show_settings_window(app_handle),
                 "quit" => app_handle.exit(0),
@@ -85,6 +92,12 @@ pub fn run() {
             core::commands::save_settings,
             core::commands::ping,
             core::commands::frontend_log,
+            core::commands::elevenlabs_streaming_connect,
+            core::commands::elevenlabs_streaming_disconnect,
+            core::commands::elevenlabs_streaming_open_gate,
+            core::commands::elevenlabs_streaming_close_gate,
+            core::commands::elevenlabs_streaming_send_chunk,
+            core::commands::elevenlabs_streaming_is_connected,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

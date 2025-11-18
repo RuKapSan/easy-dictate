@@ -8,10 +8,10 @@ function dbg(msg, level = "info") {
     if (level === "error") console.error(m);
     else if (level === "warn") console.warn(m);
     else console.log(m);
-  } catch {}
+  } catch { }
   try {
-    if (invoke) invoke("frontend_log", { level, message: msg }).catch(() => {});
-  } catch {}
+    if (invoke) invoke("frontend_log", { level, message: msg }).catch(() => { });
+  } catch { }
 }
 
 function hydrateTauriApis() {
@@ -38,8 +38,10 @@ const form = document.getElementById("settings-form");
 const providerSelect = document.getElementById("provider");
 const apiKeyInput = document.getElementById("apiKey");
 const groqApiKeyInput = document.getElementById("groqApiKey");
+const elevenlabsApiKeyInput = document.getElementById("elevenlabsApiKey");
 const openaiApiKeyLabel = document.getElementById("openai-api-key-label");
 const groqApiKeyLabel = document.getElementById("groq-api-key-label");
+const elevenlabsApiKeyLabel = document.getElementById("elevenlabs-api-key-label");
 const modelSelect = document.getElementById("model");
 const hotkeyHiddenInput = document.getElementById("hotkey");
 const hotkeyDisplay = document.getElementById("hotkeyDisplay");
@@ -160,12 +162,12 @@ function setStatus(state, text) {
     state === "recording"
       ? "Запись"
       : state === "transcribing"
-      ? "Отправка"
-      : state === "success"
-      ? "Готово"
-      : state === "error"
-      ? "Ошибка"
-      : "Ожидает";
+        ? "Отправка"
+        : state === "success"
+          ? "Готово"
+          : state === "error"
+            ? "Ошибка"
+            : "Ожидает";
   if (statusText) statusText.textContent = text;
 }
 
@@ -347,9 +349,14 @@ function syncCustomInstructionsUi() {
 }
 
 function updateProviderFields() {
-  const isGroq = providerSelect.value === "groq";
-  openaiApiKeyLabel.hidden = false; // Always show OpenAI key field
+  const provider = providerSelect.value;
+  const isGroq = provider === "groq";
+  const isElevenLabs = provider === "elevenlabs";
+
+  // Update API key labels visibility
+  openaiApiKeyLabel.hidden = isElevenLabs; // Hide OpenAI key for ElevenLabs
   groqApiKeyLabel.hidden = !isGroq;
+  elevenlabsApiKeyLabel.hidden = !isElevenLabs;
 
   // Update hint for OpenAI API key
   const openaiHint = document.getElementById("openai-api-hint");
@@ -371,6 +378,11 @@ function updateProviderFields() {
     } else {
       modelSelect.value = currentModel;
     }
+  } else if (isElevenLabs) {
+    modelSelect.innerHTML = `
+      <option value="scribe_v2_realtime">Scribe v2 Realtime</option>
+    `;
+    modelSelect.value = "scribe_v2_realtime";
   } else {
     modelSelect.innerHTML = `
       <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
@@ -403,6 +415,7 @@ async function loadSettings() {
     if (llmProviderSelect) llmProviderSelect.value = settings.llm_provider ?? "openai";
     apiKeyInput.value = settings.api_key ?? "";
     groqApiKeyInput.value = settings.groq_api_key ?? "";
+    elevenlabsApiKeyInput.value = settings.elevenlabs_api_key ?? "";
     modelSelect.value = settings.model ?? "gpt-4o-transcribe";
     updateProviderFields();
     renderHotkey(settings.hotkey ?? DEFAULT_HOTKEY);
@@ -420,6 +433,14 @@ async function loadSettings() {
     }
     syncTranslationUi();
     syncCustomInstructionsUi();
+
+    // Initialize ElevenLabs streaming if provider is ElevenLabs
+    if (window.ElevenLabsSTT?.init) {
+      dbg(`Calling ElevenLabsSTT.init with provider: ${settings.provider}`);
+      await window.ElevenLabsSTT.init(settings);
+    } else {
+      dbg("ElevenLabsSTT.init is not available", "warn");
+    }
   } catch (error) {
     console.error(error);
     showToast("Не удалось загрузить настройки", "error");
@@ -432,6 +453,7 @@ function currentSettings() {
     llm_provider: llmProviderSelect?.value ?? "openai",
     api_key: apiKeyInput.value.trim(),
     groq_api_key: groqApiKeyInput.value.trim(),
+    elevenlabs_api_key: elevenlabsApiKeyInput.value.trim(),
     model: modelSelect.value,
     hotkey: normalizeHotkeyValue(hotkeyHiddenInput?.value),
     simulate_typing: simulateTypingInput.checked,
@@ -468,6 +490,10 @@ form?.addEventListener("submit", async (event) => {
   const saved = await persistSettings(payload, "Сохранено");
   if (saved) {
     renderHotkey(payload.hotkey);
+    // Reinitialize ElevenLabs streaming if settings changed
+    if (window.ElevenLabsSTT?.init) {
+      await window.ElevenLabsSTT.init(payload);
+    }
   }
 });
 
@@ -478,6 +504,7 @@ revertBtn?.addEventListener("click", () => {
   if (llmProviderSelect) llmProviderSelect.value = initialSettings.llm_provider ?? "openai";
   apiKeyInput.value = initialSettings.api_key ?? "";
   groqApiKeyInput.value = initialSettings.groq_api_key ?? "";
+  elevenlabsApiKeyInput.value = initialSettings.elevenlabs_api_key ?? "";
   modelSelect.value = initialSettings.model ?? "gpt-4o-transcribe";
   updateProviderFields();
   renderHotkey(initialSettings.hotkey ?? DEFAULT_HOTKEY);
@@ -596,6 +623,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   } else {
     dbg("invoke not available at DOMContentLoaded", "warn");
   }
+
+  // Setup ElevenLabs event listeners
+  if (window.ElevenLabsSTT?.setupEventListeners) {
+    window.ElevenLabsSTT.setupEventListeners();
+  }
+
   await loadSettings();
   if (tauriApp?.getVersion) {
     try {
@@ -632,10 +665,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     await listen("transcription://partial", ({ payload }) => {
       if (!payload?.text) return;
       resultEl.hidden = false;
+      resultEl.classList.add("partial");
       resultEl.textContent = payload.text;
+      setStatus("recording", "Распознаю...");
     });
 
     await listen("transcription://complete", ({ payload }) => {
+      resultEl.classList.remove("partial");
       if (payload?.text) {
         resultEl.hidden = false;
         resultEl.textContent = payload.text;

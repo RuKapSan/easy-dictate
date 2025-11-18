@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcut, ShortcutState};
 
-use crate::{audio::RecordingSession, settings::AppSettings};
+use crate::{audio::RecordingSession, settings::{AppSettings, TranscriptionProvider}};
 
 use super::{
     events::{emit_error, emit_status, StatusPhase},
@@ -41,6 +41,35 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
 
 pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
     let state: State<'_, AppState> = app.state();
+
+    // Получаем настройки для проверки провайдера
+    let settings = tauri::async_runtime::block_on(state.current_settings());
+
+    // Проверяем - используем ли gated streaming для ElevenLabs
+    log::info!("[Hotkey] Pressed. Provider: {:?}, Streaming connected: {}", settings.provider, tauri::async_runtime::block_on(state.elevenlabs_streaming().is_connected()));
+
+    if settings.provider == TranscriptionProvider::ElevenLabs {
+        let is_streaming_connected = tauri::async_runtime::block_on(
+            state.elevenlabs_streaming().is_connected()
+        );
+
+        if is_streaming_connected {
+            // Gated streaming режим - просто открываем gate
+            log::info!("[Hotkey] ElevenLabs gated streaming - opening gate");
+            if let Err(e) = tauri::async_runtime::block_on(
+                state.elevenlabs_streaming().open_gate()
+            ) {
+                emit_error(app, &format!("Failed to open gate: {}", e));
+            } else {
+                emit_status(app, StatusPhase::Recording, Some("Streaming..."));
+            }
+            return Ok(());
+        } else {
+            log::warn!("[Hotkey] ElevenLabs provider selected but streaming NOT connected. Falling back to standard recording.");
+        }
+    }
+
+    // Старый режим - recording
     if state.is_transcribing().load(Ordering::SeqCst) {
         emit_status(
             app,
@@ -72,6 +101,31 @@ pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
 
 pub fn handle_hotkey_released(app: &AppHandle) -> Result<()> {
     let state: State<'_, AppState> = app.state();
+
+    // Получаем настройки для проверки провайдера
+    let settings = tauri::async_runtime::block_on(state.current_settings());
+
+    // Проверяем - используем ли gated streaming для ElevenLabs
+    if settings.provider == TranscriptionProvider::ElevenLabs {
+        let is_streaming_connected = tauri::async_runtime::block_on(
+            state.elevenlabs_streaming().is_connected()
+        );
+
+        if is_streaming_connected {
+            // Gated streaming режим - закрываем gate и отправляем commit
+            log::info!("[Hotkey] ElevenLabs gated streaming - closing gate and committing");
+            if let Err(e) = tauri::async_runtime::block_on(
+                state.elevenlabs_streaming().close_gate_and_commit()
+            ) {
+                emit_error(app, &format!("Failed to close gate: {}", e));
+            } else {
+                emit_status(app, StatusPhase::Transcribing, Some("Processing..."));
+            }
+            return Ok(());
+        }
+    }
+
+    // Старый режим - recording
     let active: Option<RecordingSession> = {
         let mut guard = state
             .active_recording()

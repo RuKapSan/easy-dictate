@@ -32,10 +32,18 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-clipboard-manager = "2"
 reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
-tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "sync"] }
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["codec"] }
 cpal = "0.15"
+rubato = "0.14"
 hound = "3.5"
 anyhow = "1.0"
 thiserror = "1.0"
 enigo = { version = "0.6.1" }
+arboard = "3.2"
 percent-encoding = "2"
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+base64 = "0.22"
+futures = "0.3"
+futures-util = "0.3"
+urlencoding = "2.1"
