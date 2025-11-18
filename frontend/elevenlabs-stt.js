@@ -16,6 +16,11 @@ function log(msg, level = "info") {
 let isConnected = false;
 let currentProvider = null;
 
+// Store last config for reconnection
+let lastApiKey = "";
+let lastSampleRate = 48000;
+let lastLanguageCode = "ru";
+
 /**
  * Connect to ElevenLabs streaming STT via Rust backend
  */
@@ -25,9 +30,22 @@ async function connectElevenLabsStreaming(apiKey, sampleRate = 48000, languageCo
     return false;
   }
 
+  // Update last config
+  lastApiKey = apiKey;
+  lastSampleRate = sampleRate;
+  lastLanguageCode = languageCode;
+
   if (isConnected) {
-    log("Already connected");
-    return true;
+    // Check if backend agrees
+    try {
+      const backendConnected = await window.__TAURI__.core.invoke("elevenlabs_streaming_is_connected");
+      if (backendConnected) {
+        log("Already connected");
+        return true;
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 
   try {
@@ -44,6 +62,7 @@ async function connectElevenLabsStreaming(apiKey, sampleRate = 48000, languageCo
   } catch (error) {
     log(`Failed to connect: ${error}`, "error");
     showToastIfAvailable(`ElevenLabs connection error: ${error}`, "error");
+    isConnected = false;
     return false;
   }
 }
@@ -53,10 +72,6 @@ async function connectElevenLabsStreaming(apiKey, sampleRate = 48000, languageCo
  */
 async function disconnectElevenLabsStreaming() {
   if (!window.__TAURI__?.core?.invoke) {
-    return;
-  }
-
-  if (!isConnected) {
     return;
   }
 
@@ -115,8 +130,8 @@ async function initElevenLabsStreaming(settings) {
     return;
   }
 
-  // Connect if ElevenLabs is selected and not yet connected
-  if (isElevenLabs && !isConnected) {
+  // Connect if ElevenLabs is selected
+  if (isElevenLabs) {
     const apiKey = settings.elevenlabs_api_key?.trim();
 
     if (!apiKey) {
@@ -144,6 +159,7 @@ async function initElevenLabsStreaming(settings) {
       languageCode = "ja";
     }
 
+    // Always try to connect/reconnect if needed
     log(`Initializing with language: ${languageCode}`);
     const connected = await connectElevenLabsStreaming(apiKey, 48000, languageCode);
 
@@ -169,10 +185,7 @@ function setupElevenLabsEventListeners() {
     if (!payload) return;
 
     const resultEl = document.getElementById("last-result");
-    if (!resultEl) return;
-
-    // Show partial or committed transcripts
-    if (payload.text) {
+    if (resultEl && payload.text) {
       resultEl.hidden = false;
       resultEl.textContent = payload.text;
 
@@ -183,12 +196,34 @@ function setupElevenLabsEventListeners() {
         resultEl.style.fontStyle = "italic";
         resultEl.style.color = "#888";
         log(`Partial: "${payload.text}"`, "debug");
+      } else {
         // Committed transcript - show as final
         resultEl.style.opacity = "1";
         resultEl.style.fontStyle = "normal";
         resultEl.style.color = "";
         log(`Committed: "${payload.text}"`);
       }
+    }
+  });
+
+  // Auto-reconnect on connection close
+  listen("elevenlabs://connection-closed", () => {
+    log("Connection closed by server. Attempting to reconnect in 3s...", "warn");
+    isConnected = false;
+    setTimeout(() => {
+      if (currentProvider === "elevenlabs" && lastApiKey) {
+        log("Reconnecting...");
+        connectElevenLabsStreaming(lastApiKey, lastSampleRate, lastLanguageCode);
+      }
+    }, 3000);
+  });
+
+  // Handle errors
+  listen("elevenlabs://error", ({ payload }) => {
+    log(`Error from backend: ${payload.error}`, "error");
+    // If error indicates connection loss, we might want to reset isConnected
+    if (payload.error.includes("Connection is dead") || payload.error.includes("closed")) {
+      isConnected = false;
     }
   });
 

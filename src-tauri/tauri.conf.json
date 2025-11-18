@@ -30,8 +30,8 @@
         "decorations": false,
         "skipTaskbar": true,
         "visible": true,
-        "width": 1000,
-        "height": 300,
+        "width": 800,
+        "height": 200,
         "center": true,
         "resizable": false,
         "shadow": false

@@ -13,7 +13,7 @@ function log(msg) {
 let hideTimeout = null;
 let animationTimeout = null;
 
-function showOverlay() {
+async function showOverlay() {
     if (hideTimeout) {
         clearTimeout(hideTimeout);
         hideTimeout = null;
@@ -24,7 +24,8 @@ function showOverlay() {
     }
     container.classList.remove('hidden');
     log("Showing overlay window");
-    appWindow.show();
+    await appWindow.show();
+    await appWindow.setFocus();
 }
 
 function hideOverlay(delay = 2000) {
@@ -57,6 +58,9 @@ function setStatus(status) {
 
 async function init() {
     log("Overlay initialized");
+    // Ensure window is hidden on startup (since we set visible: true in config)
+    appWindow.hide();
+
     // Listen for status changes
     await listen('transcription://status', (event) => {
         log(`Status event: ${JSON.stringify(event.payload)}`);
@@ -77,7 +81,10 @@ async function init() {
             updateText('Ошибка');
             hideOverlay(3000);
         } else if (phase === 'idle') {
-            hideOverlay(0);
+            // Only hide if we are NOT in success state (let success timeout handle it)
+            if (!container.classList.contains('success')) {
+                hideOverlay(0);
+            }
         }
     });
 
