@@ -214,6 +214,13 @@ function setupElevenLabsEventListeners() {
 
     log(`Connection closed. Code: ${code}, Reason: ${reason}`, "info");
 
+    // 4001 = Context Reset (Backend requested reset)
+    if (code === 4001) {
+      log("Context reset requested. Reconnecting immediately...", "info");
+      connectElevenLabsStreaming(lastApiKey, lastSampleRate, lastLanguageCode);
+      return;
+    }
+
     // 1000 = Normal Closure
     if (code === 1000) {
       log("Normal closure detected. Not reconnecting.", "info");

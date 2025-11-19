@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use tokio::time::{Duration, interval};
 use tokio_tungstenite::{
     connect_async,
-    tungstenite::{http::Request, Message},
+    tungstenite::{http::Request, protocol::frame::coding::CloseCode, protocol::CloseFrame, Message},
     MaybeTlsStream, WebSocketStream,
 };
 use tokio::net::TcpStream;
@@ -20,7 +20,7 @@ type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 struct StreamingConnection {
     write: Arc<Mutex<futures_util::stream::SplitSink<WsStream, Message>>>,
     is_transmitting: Arc<AtomicBool>,
-    is_alive: Arc<AtomicBool>, // New field to track actual connection state
+    is_alive: Arc<AtomicBool>,
     cancel_token: tokio_util::sync::CancellationToken,
     reader_task: tokio::task::JoinHandle<()>,
     keepalive_task: tokio::task::JoinHandle<()>,
@@ -118,10 +118,17 @@ impl ElevenLabsStreamingClient {
             }
         };
 
-        let ws_url = format!(
-            "wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2_realtime&language_code={}&audio_format={}&commit_strategy=manual&enable_partials=true",
-            language_code, audio_format
-        );
+        let ws_url = if language_code.is_empty() || language_code == "auto" {
+            format!(
+                "wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2_realtime&audio_format={}&commit_strategy=manual&enable_partials=true",
+                audio_format
+            )
+        } else {
+            format!(
+                "wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2_realtime&language_code={}&audio_format={}&commit_strategy=manual&enable_partials=true",
+                language_code, audio_format
+            )
+        };
 
         log::info!("[ElevenLabs] Connecting to WebSocket (sample_rate: {}, audio_format: {})", sample_rate, audio_format);
 
@@ -160,8 +167,9 @@ impl ElevenLabsStreamingClient {
             let app_handle = app_handle.clone();
             let cancel_token = cancel_token.clone();
             let is_alive = is_alive.clone();
+            let write = write.clone();
             tokio::spawn(async move {
-                message_reader_task(read, app_handle, cancel_token, is_alive).await;
+                message_reader_task(read, write, app_handle, cancel_token, is_alive).await;
             })
         };
 
@@ -223,9 +231,6 @@ impl ElevenLabsStreamingClient {
         write.send(Message::Text(json)).await
             .context("Failed to send audio chunk")?;
         
-        // Log every ~50 chunks to avoid spam, or just log that we are sending
-        // log::info!("[ElevenLabs] Sent audio chunk");
-
         Ok(())
     }
 
@@ -247,40 +252,44 @@ impl ElevenLabsStreamingClient {
 
     /// Закрыть gate и отправить commit (KeyUp)
     pub async fn close_gate_and_commit(&self) -> Result<()> {
-        let conn_guard = self.connection.lock().await;
-        let conn = conn_guard
-            .as_ref()
-            .ok_or_else(|| anyhow!("Not connected"))?;
+        // 1. Send commit on CURRENT connection
+        {
+            let conn_guard = self.connection.lock().await;
+            let conn = conn_guard
+                .as_ref()
+                .ok_or_else(|| anyhow!("Not connected"))?;
 
-        if !conn.is_alive.load(Ordering::Relaxed) {
-             return Err(anyhow!("Connection is dead"));
-        }
+            if !conn.is_alive.load(Ordering::Relaxed) {
+                 return Err(anyhow!("Connection is dead"));
+            }
 
-        conn.is_transmitting.store(false, Ordering::Relaxed);
-        log::info!("[ElevenLabs] Gate CLOSED - sending commit");
+            conn.is_transmitting.store(false, Ordering::Relaxed);
+            log::info!("[ElevenLabs] Gate CLOSED - sending commit");
 
-        // Send 100ms of silence with commit=true to avoid input_error on empty chunk
-        let silence_duration_sec = 0.1;
-        let sample_count = (conn.sample_rate as f32 * silence_duration_sec) as usize;
-        // 16-bit audio = 2 bytes per sample
-        let silence_bytes = vec![0u8; sample_count * 2];
-        let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&silence_bytes);
+            // Send 100ms of silence with commit=true
+            let silence_duration_sec = 0.1;
+            let sample_count = (conn.sample_rate as f32 * silence_duration_sec) as usize;
+            let silence_bytes = vec![0u8; sample_count * 2];
+            let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&silence_bytes);
 
-        let message = AudioChunkMessage {
-            message_type: "input_audio_chunk".to_string(),
-            audio_base_64: audio_base64,
-            sample_rate: conn.sample_rate,
-            commit: true,
-        };
+            let message = AudioChunkMessage {
+                message_type: "input_audio_chunk".to_string(),
+                audio_base_64: audio_base64,
+                sample_rate: conn.sample_rate,
+                commit: true,
+            };
 
-        let json = serde_json::to_string(&message)?;
+            let json = serde_json::to_string(&message)?;
 
-        let mut write = conn.write.lock().await;
-        write.send(Message::Text(json)).await
-            .context("Failed to send commit")?;
+            let mut write = conn.write.lock().await;
+            write.send(Message::Text(json)).await
+                .context("Failed to send commit")?;
+        } // Unlock mutex here
 
         Ok(())
     }
+
+
 
     /// Отключиться и закрыть WebSocket
     pub async fn disconnect(&self) -> Result<()> {
@@ -321,6 +330,7 @@ impl ElevenLabsStreamingClient {
 /// Background task для чтения сообщений из WebSocket
 async fn message_reader_task(
     mut read: futures_util::stream::SplitStream<WsStream>,
+    write: Arc<Mutex<futures_util::stream::SplitSink<WsStream, Message>>>,
     app_handle: AppHandle,
     cancel_token: tokio_util::sync::CancellationToken,
     is_alive: Arc<AtomicBool>,
@@ -334,7 +344,16 @@ async fn message_reader_task(
             msg_result = read.next() => {
                 match msg_result {
                     Some(Ok(Message::Text(text))) => {
-                        handle_text_message(&text, &app_handle);
+                        let should_close = handle_text_message(&text, &app_handle);
+                        if should_close {
+                            log::info!("[ElevenLabs] Received committed transcript, closing connection (Context Reset)");
+                            let mut write = write.lock().await;
+                            let _ = write.send(Message::Close(Some(CloseFrame {
+                                code: CloseCode::Library(4001),
+                                reason: "ContextReset".into(),
+                            }))).await;
+                            // Loop will break when Close frame is echoed back or stream ends
+                        }
                     }
                     Some(Ok(Message::Close(frame))) => {
                         log::info!("[ElevenLabs] WebSocket closed: {:?}", frame);
@@ -362,6 +381,10 @@ async fn message_reader_task(
                     }
                     None => {
                         log::info!("[ElevenLabs] WebSocket stream ended");
+                        let _ = app_handle.emit("elevenlabs://connection-closed", ConnectionClosedEvent {
+                            code: 1006, // Abnormal Closure
+                            reason: "Stream ended".to_string(),
+                        });
                         break;
                     }
                     _ => {}
@@ -375,7 +398,8 @@ async fn message_reader_task(
 }
 
 /// Обработка текстовых сообщений от ElevenLabs
-fn handle_text_message(text: &str, app_handle: &AppHandle) {
+/// Returns true if connection should be closed (committed transcript received)
+fn handle_text_message(text: &str, app_handle: &AppHandle) -> bool {
     log::debug!("[ElevenLabs] Raw message: {}", text);
 
     if let Ok(msg) = serde_json::from_str::<TranscriptMessage>(text) {
@@ -389,6 +413,7 @@ fn handle_text_message(text: &str, app_handle: &AppHandle) {
                         session_id,
                     });
                 }
+                false
             }
             "partial_transcript" => {
                 log::info!("[ElevenLabs] Partial: {}", msg.text);
@@ -396,6 +421,7 @@ fn handle_text_message(text: &str, app_handle: &AppHandle) {
                     text: msg.text,
                     is_partial: true,
                 });
+                false
             }
             "committed_transcript" | "committed_transcript_with_timestamps" => {
                 log::info!("[ElevenLabs] Committed: {}", msg.text);
@@ -403,17 +429,22 @@ fn handle_text_message(text: &str, app_handle: &AppHandle) {
                     text: msg.text,
                     is_partial: false,
                 });
+                true // Signal to close connection
             }
             "error" | "auth_error" | "quota_exceeded_error" | "input_error" => {
                 log::error!("[ElevenLabs] Error received: {:?}", msg);
                 let _ = app_handle.emit("elevenlabs://error", ErrorEvent {
                     error: format!("{:?}", msg),
                 });
+                false
             }
             _ => {
                 log::debug!("[ElevenLabs] Unknown message type: {}", msg.message_type);
+                false
             }
         }
+    } else {
+        false
     }
 }
 

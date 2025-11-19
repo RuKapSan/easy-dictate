@@ -172,6 +172,12 @@ async fn audio_streaming_task(
 ) {
     log::info!("[AudioStreaming] Task started");
 
+    // Noise gate threshold (RMS amplitude)
+    // PCM16 max is 32767. 
+    // 500 ~= -36dB (conservative)
+    // 1000 ~= -30dB
+    const NOISE_THRESHOLD: f32 = 500.0;
+
     loop {
         tokio::select! {
             _ = cancel_token.cancelled() => {
@@ -181,7 +187,29 @@ async fn audio_streaming_task(
             }
             chunk = audio_rx.recv() => {
                 match chunk {
-                    Some(pcm_data) => {
+                    Some(mut pcm_data) => {
+                        // Calculate RMS to check for silence/noise
+                        let mut sum_squares = 0.0;
+                        let mut sample_count = 0;
+                        
+                        for chunk in pcm_data.chunks_exact(2) {
+                            let sample = i16::from_le_bytes([chunk[0], chunk[1]]) as f32;
+                            sum_squares += sample * sample;
+                            sample_count += 1;
+                        }
+
+                        let rms = if sample_count > 0 {
+                            (sum_squares / sample_count as f32).sqrt()
+                        } else {
+                            0.0
+                        };
+
+                        // Apply noise gate
+                        if rms < NOISE_THRESHOLD {
+                            // Silence the chunk
+                            pcm_data.fill(0);
+                        }
+
                         // Send chunk to streaming client (will check gate internally)
                         if let Err(e) = streaming_client.send_audio_chunk(pcm_data).await {
                             log::error!("[AudioStreaming] Failed to send chunk: {}", e);
