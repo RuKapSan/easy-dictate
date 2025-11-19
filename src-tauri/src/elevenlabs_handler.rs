@@ -45,14 +45,13 @@ fn append_transcript_log(app: &AppHandle, tag: &str, text: &str) {
     let tag = tag.to_string();
     let text = text.to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        if let Ok(resolver) = handle.path() {
-            if let Ok(dir) = resolver.app_log_dir() {
-                let _ = std::fs::create_dir_all(&dir);
-                let path = dir.join("transcripts.log");
-                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-                    use std::io::Write;
-                    let _ = writeln!(file, "[{}] {}", tag, text);
-                }
+        let resolver = handle.path();
+        if let Ok(dir) = resolver.app_log_dir() {
+            let _ = std::fs::create_dir_all(&dir);
+            let path = dir.join("transcripts.log");
+            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                use std::io::Write;
+                let _ = writeln!(file, "[{}] {}", tag, text);
             }
         }
     });

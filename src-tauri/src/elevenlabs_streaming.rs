@@ -107,6 +107,12 @@ impl ElevenLabsStreamingClient {
         self.connect(cfg.api_key, cfg.sample_rate, cfg.language_code, app_handle).await
     }
 
+    /// Retrieve the last used connection configuration
+    pub async fn get_last_config(&self) -> Option<(String, u32, String)> {
+        let guard = self.last_config.lock().await;
+        guard.as_ref().map(|cfg| (cfg.api_key.clone(), cfg.sample_rate, cfg.language_code.clone()))
+    }
+
     /// Returns whether any audio has been sent since the last gate open
     pub async fn has_audio_since_open(&self) -> bool {
         if let Some(conn) = self.connection.lock().await.as_ref() {
@@ -338,7 +344,7 @@ impl ElevenLabsStreamingClient {
             }
 
             // Send small silence then commit=true
-            let duration_ms: usize = 120;
+            let duration_ms: usize = 50;
             let samples = (conn.sample_rate as usize * duration_ms) / 1000;
             let silence_bytes = vec![0u8; samples * 2];
             let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&silence_bytes);
@@ -359,11 +365,17 @@ impl ElevenLabsStreamingClient {
                 .context("Failed to send commit")?;
         }
 
-        // 2) Wait for committed notification (timeout) and then close/reset connection
-        let (app_handle, cancel_token, commit_notify) = {
+        // 2) Wait for committed notification (timeout)
+        let (app_handle, _cancel_token, commit_notify) = {
             let guard = self.connection.lock().await;
+            // If connection is gone, we can't do anything
             let conn = guard.as_ref().ok_or_else(|| anyhow!("Connection missing after commit"))?;
-            (conn.app_handle.clone(), conn.cancel_token.clone(), conn.commit_notify.clone())
+            
+            (
+                conn.app_handle.clone(), 
+                conn.cancel_token.clone(), 
+                conn.commit_notify.clone(),
+            )
         };
 
         let commit_ok = match timeout(Duration::from_secs(3), commit_notify.notified()).await {
@@ -378,19 +390,40 @@ impl ElevenLabsStreamingClient {
             );
         }
 
+        // 3) Graceful Shutdown: Send Close frame -> Wait for Reader to see Close -> Cancel if stuck
         {
             let mut guard = self.connection.lock().await;
             if let Some(conn) = guard.take() {
                 conn.is_alive.store(false, Ordering::Relaxed);
-                cancel_token.cancel();
-                let _ = conn.reader_task.await;
-                let _ = conn.keepalive_task.await;
+                
+                // Stop keepalive immediately
+                conn.keepalive_task.abort();
 
-                let mut write = conn.write.lock().await;
-                let _ = write
-                    .send(Message::Close(Some(CloseFrame { code: CloseCode::Library(4001), reason: "ContextReset".into() })))
-                    .await;
-                log::info!("[ElevenLabs] Connection closed after commit (Context Reset)");
+                // Send Close frame
+                {
+                    let mut write = conn.write.lock().await;
+                    let _ = write
+                        .send(Message::Close(Some(CloseFrame { 
+                            code: CloseCode::Library(4001), 
+                            reason: "ContextReset".into() 
+                        })))
+                        .await;
+                }
+                log::info!("[ElevenLabs] Sent Close(4001), waiting for server close...");
+
+                // Wait for reader task to finish (it should exit when it receives Close from server)
+                // We give it a short timeout
+                let reader_result = timeout(Duration::from_secs(2), conn.reader_task).await;
+                
+                match reader_result {
+                    Ok(_) => log::info!("[ElevenLabs] Reader task finished gracefully"),
+                    Err(_) => {
+                        log::warn!("[ElevenLabs] Reader task timed out, forcing cancel");
+                        conn.cancel_token.cancel();
+                    }
+                }
+                
+                log::info!("[ElevenLabs] Connection closed and cleaned up");
             }
         }
 

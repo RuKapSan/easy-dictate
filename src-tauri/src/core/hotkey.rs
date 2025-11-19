@@ -63,10 +63,26 @@ pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
                 is_committing
             );
 
-            let mut connected = tauri::async_runtime::block_on(
-                state.elevenlabs_streaming().connect_with_last_config(app.clone())
-            ).is_ok();
+            let mut connected = false;
+            
+            // Try to reconnect using last config (including audio stream restart)
+            if let Some((api_key, sample_rate, language_code)) = tauri::async_runtime::block_on(
+                state.elevenlabs_streaming().get_last_config()
+            ) {
+                log::info!("[Hotkey] Reconnecting with last config: rate={}, lang={}", sample_rate, language_code);
+                let state_clone = state.clone();
+                connected = tauri::async_runtime::block_on(
+                    crate::core::commands::elevenlabs_streaming_connect(
+                        app.clone(),
+                        state_clone,
+                        api_key,
+                        sample_rate,
+                        language_code,
+                    )
+                ).is_ok();
+            }
 
+            // Fallback to settings if no last config or reconnection failed
             if !connected {
                 let api_key = settings.elevenlabs_api_key.trim().to_string();
                 if api_key.is_empty() {
@@ -168,12 +184,17 @@ pub fn handle_hotkey_released(app: &AppHandle) -> Result<()> {
             } else {
                 // Gated streaming режим - закрываем gate и отправляем commit
                 log::info!("[Hotkey] ElevenLabs gated streaming - closing gate and committing");
+                
+                // Emit processing status BEFORE waiting for commit, to avoid overwriting "Idle" status
+                // that comes from the handler when transcript is received.
+                emit_status(app, StatusPhase::Transcribing, Some("Processing..."));
+
                 if let Err(e) = tauri::async_runtime::block_on(
                     state.elevenlabs_streaming().close_gate_and_commit()
                 ) {
                     emit_error(app, &format!("Failed to close gate: {}", e));
-                } else {
-                    emit_status(app, StatusPhase::Transcribing, Some("Processing..."));
+                    // If failed, revert to idle
+                    emit_status(app, StatusPhase::Idle, Some("Ready for next transcription"));
                 }
             }
             return Ok(());

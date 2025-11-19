@@ -129,7 +129,15 @@ pub async fn elevenlabs_streaming_connect(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 2. Spawn dedicated thread for audio streaming (CPAL Stream is !Send)
+    // 2. Cancel any existing audio streaming task to prevent leaks
+    if let Ok(mut cancel_guard) = state.audio_streaming_cancel().lock() {
+        if let Some(token) = cancel_guard.take() {
+            log::info!("[Commands] Cancelling existing audio streaming task before spawning new one");
+            token.cancel();
+        }
+    }
+
+    // 3. Spawn dedicated thread for audio streaming (CPAL Stream is !Send)
     let cancel_token = tokio_util::sync::CancellationToken::new();
     let cancel_clone = cancel_token.clone();
     let streaming_client = state.elevenlabs_streaming().clone();
@@ -236,7 +244,9 @@ async fn audio_streaming_task(
                         if let Err(e) = streaming_client.send_audio_chunk(pcm_data).await {
                             log::error!("[AudioStreaming] Failed to send chunk: {}", e);
                             // If connection is dead or other fatal error, stop the loop
-                            if e.to_string().contains("Connection is dead") || e.to_string().contains("closed") {
+                            let err_str = e.to_string();
+                            if err_str.contains("Connection is dead") || err_str.contains("closed") || err_str.contains("Not connected") {
+                                log::info!("[AudioStreaming] Connection closed, stopping audio task");
                                 break;
                             }
                         }
