@@ -22,6 +22,7 @@ pub fn setup_elevenlabs_event_handlers(app: &AppHandle) {
                 let _ = app.emit("transcription://partial", serde_json::json!({
                     "text": payload.text
                 }));
+                append_transcript_log(&app, "partial", &payload.text);
                 return;
             }
 
@@ -37,6 +38,24 @@ pub fn setup_elevenlabs_event_handlers(app: &AppHandle) {
     });
 
     log::info!("[ElevenLabs Handler] Event handlers registered");
+}
+
+fn append_transcript_log(app: &AppHandle, tag: &str, text: &str) {
+    let handle = app.clone();
+    let tag = tag.to_string();
+    let text = text.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Ok(resolver) = handle.path() {
+            if let Ok(dir) = resolver.app_log_dir() {
+                let _ = std::fs::create_dir_all(&dir);
+                let path = dir.join("transcripts.log");
+                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                    use std::io::Write;
+                    let _ = writeln!(file, "[{}] {}", tag, text);
+                }
+            }
+        }
+    });
 }
 
 // Also handle ElevenLabs errors to update UI status
@@ -55,6 +74,7 @@ pub fn setup_elevenlabs_error_handlers(app: &AppHandle) {
         emit_status(&app, StatusPhase::Error, Some("Streaming error"));
         // Transition back to Idle after error for UI to recover
         emit_status(&app, StatusPhase::Idle, Some("Ready for next transcription"));
+        log::info!("[ElevenLabs Handler] Error handled, state reset to Idle");
     });
 
     log::info!("[ElevenLabs Handler] Error handlers registered");
@@ -93,6 +113,7 @@ async fn process_transcript(app: &AppHandle, text: String) -> anyhow::Result<()>
 
     // Выводим текст
     output_text(app, &settings, &final_text).await?;
+    append_transcript_log(app, "committed", &final_text);
 
     // Сбрасываем флаг транскрипции
     state.is_transcribing().store(false, Ordering::SeqCst);

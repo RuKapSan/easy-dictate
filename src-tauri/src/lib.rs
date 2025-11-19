@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use tauri::{Manager, RunEvent};
+use tauri_plugin_log::{Target, TargetKind};
 
 mod audio;
 mod audio_stream;
@@ -26,8 +27,12 @@ use settings::SettingsStore;
 pub fn run() {
     tauri::Builder::default()
         .plugin(
-            tauri_plugin_log::Builder::default()
+            tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: Some("logs.log".into()) }),
+                ])
                 .build(),
         )
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -106,6 +111,11 @@ pub fn run() {
             // Setup ElevenLabs streaming event handlers
             elevenlabs_handler::setup_elevenlabs_event_handlers(handle);
             elevenlabs_handler::setup_elevenlabs_error_handlers(handle);
+
+            // Log where file logs are stored
+            if let Ok(log_dir) = resolver.app_log_dir() {
+                log::info!("[Log] File logging enabled: {}", log_dir.join("logs.log").display());
+            }
 
             handle.on_menu_event(|app_handle, event| match event.id().as_ref() {
                 "open" => tray::show_settings_window(app_handle),

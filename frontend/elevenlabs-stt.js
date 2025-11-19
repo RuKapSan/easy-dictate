@@ -189,24 +189,20 @@ function setupElevenLabsEventListeners() {
     }
   });
 
-  // Auto-reconnect on connection close
+  // Connection closed: for ContextReset (4001) auto-reconnect to keep next press instant
   listen("elevenlabs://connection-closed", (event) => {
     const payload = event.payload || {};
     const code = payload.code;
     const reason = payload.reason;
 
     log(`Connection closed. Code: ${code}, Reason: ${reason}`, "info");
-
-    // Reconnect on context reset (4001) and normal closure (1000) as well as any other code
     isConnected = false;
-    const delayMs = code === 4001 ? 100 : 1000;
-    log(`Scheduling reconnect in ${delayMs}ms...`);
-    setTimeout(() => {
-      if (currentProvider === "elevenlabs" && lastApiKey) {
-        log("Reconnecting...");
+    if (code === 4001 && currentProvider === "elevenlabs" && lastApiKey) {
+      setTimeout(() => {
+        log("Reconnecting after context reset...");
         connectElevenLabsStreaming(lastApiKey, lastSampleRate, lastLanguageCode);
-      }
-    }, delayMs);
+      }, 100);
+    }
   });
 
   // Handle errors

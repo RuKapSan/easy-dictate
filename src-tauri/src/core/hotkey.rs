@@ -52,9 +52,53 @@ pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
         let is_streaming_connected = tauri::async_runtime::block_on(
             state.elevenlabs_streaming().is_connected()
         );
+        let is_committing = tauri::async_runtime::block_on(
+            state.elevenlabs_streaming().is_committing()
+        );
 
-        if is_streaming_connected {
-            // Gated streaming режим - просто открываем gate
+        if !is_streaming_connected || is_committing {
+            log::info!(
+                "[Hotkey] Preparing clean session (connected: {}, committing: {})",
+                is_streaming_connected,
+                is_committing
+            );
+
+            let mut connected = tauri::async_runtime::block_on(
+                state.elevenlabs_streaming().connect_with_last_config(app.clone())
+            ).is_ok();
+
+            if !connected {
+                let api_key = settings.elevenlabs_api_key.trim().to_string();
+                if api_key.is_empty() {
+                    log::warn!("[Hotkey] ElevenLabs API key is empty; falling back to standard recording.");
+                } else {
+                    let state_clone = state.clone();
+                    connected = tauri::async_runtime::block_on(
+                        crate::core::commands::elevenlabs_streaming_connect(
+                            app.clone(),
+                            state_clone,
+                            api_key,
+                            48_000,
+                            "auto".to_string(),
+                        )
+                    ).is_ok();
+                }
+            }
+
+            if connected {
+                log::info!("[Hotkey] Clean session ready. Opening gate...");
+                if let Err(e) = tauri::async_runtime::block_on(
+                    state.elevenlabs_streaming().open_gate()
+                ) {
+                    emit_error(app, &format!("Failed to open gate: {}", e));
+                } else {
+                    emit_status(app, StatusPhase::Recording, Some("Streaming..."));
+                }
+                return Ok(());
+            }
+            // else fall through to legacy recording
+        } else {
+            // Already connected and not committing: open gate
             log::info!("[Hotkey] ElevenLabs gated streaming - opening gate");
             if let Err(e) = tauri::async_runtime::block_on(
                 state.elevenlabs_streaming().open_gate()
@@ -64,51 +108,6 @@ pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
                 emit_status(app, StatusPhase::Recording, Some("Streaming..."));
             }
             return Ok(());
-        } else {
-            // Попробуем быстро переподключиться к стримингу и сразу открыть gate
-            log::warn!("[Hotkey] ElevenLabs selected but streaming NOT connected. Attempting quick reconnect...");
-
-            let api_key = settings.elevenlabs_api_key.trim().to_string();
-            if api_key.is_empty() {
-                log::warn!("[Hotkey] ElevenLabs API key is empty; falling back to standard recording.");
-            } else {
-                // Используем встроенную команду подключения (определит реальный sample rate)
-                let state_clone = state.clone();
-                let connect_res = tauri::async_runtime::block_on(
-                    crate::core::commands::elevenlabs_streaming_connect(
-                        app.clone(),
-                        state_clone,
-                        api_key,
-                        48_000,
-                        "auto".to_string(),
-                    )
-                );
-
-                match connect_res {
-                    Ok(()) => {
-                        // Проверяем состояние и открываем gate
-                        let reconnected = tauri::async_runtime::block_on(
-                            state.elevenlabs_streaming().is_connected()
-                        );
-                        if reconnected {
-                            log::info!("[Hotkey] Reconnected. Opening gate...");
-                            if let Err(e) = tauri::async_runtime::block_on(
-                                state.elevenlabs_streaming().open_gate()
-                            ) {
-                                emit_error(app, &format!("Failed to open gate after reconnect: {}", e));
-                            } else {
-                                emit_status(app, StatusPhase::Recording, Some("Streaming..."));
-                                return Ok(());
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        log::error!("[Hotkey] Failed to reconnect ElevenLabs streaming: {}", err);
-                    }
-                }
-            }
-
-            log::warn!("[Hotkey] Falling back to standard recording.");
         }
     }
 
