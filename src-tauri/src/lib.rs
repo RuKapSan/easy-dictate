@@ -105,6 +105,7 @@ pub fn run() {
 
             // Setup ElevenLabs streaming event handlers
             elevenlabs_handler::setup_elevenlabs_event_handlers(handle);
+            elevenlabs_handler::setup_elevenlabs_error_handlers(handle);
 
             handle.on_menu_event(|app_handle, event| match event.id().as_ref() {
                 "open" => tray::show_settings_window(app_handle),

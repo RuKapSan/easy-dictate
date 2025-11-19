@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Emitter, Listener};
+use tauri::{AppHandle, Emitter, Listener, Manager};
 use crate::core::state::AppState;
 use crate::settings::AppSettings;
 
@@ -37,6 +37,27 @@ pub fn setup_elevenlabs_event_handlers(app: &AppHandle) {
     });
 
     log::info!("[ElevenLabs Handler] Event handlers registered");
+}
+
+// Also handle ElevenLabs errors to update UI status
+pub fn setup_elevenlabs_error_handlers(app: &AppHandle) {
+    let app_err = app.clone();
+    app.listen("elevenlabs://error", move |event| {
+        let app = app_err.clone();
+        use crate::core::events::{emit_status, StatusPhase};
+        use std::sync::atomic::Ordering;
+
+        log::error!("[ElevenLabs Handler] Error event: {}", event.payload());
+
+        let state = app.state::<AppState>();
+        state.is_transcribing().store(false, Ordering::SeqCst);
+
+        emit_status(&app, StatusPhase::Error, Some("Streaming error"));
+        // Transition back to Idle after error for UI to recover
+        emit_status(&app, StatusPhase::Idle, Some("Ready for next transcription"));
+    });
+
+    log::info!("[ElevenLabs Handler] Error handlers registered");
 }
 
 #[derive(serde::Deserialize)]

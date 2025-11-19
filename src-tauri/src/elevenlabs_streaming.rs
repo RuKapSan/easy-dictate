@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use tokio::time::{Duration, interval};
 use tokio_tungstenite::{
     connect_async,
-    tungstenite::{http::Request, protocol::frame::coding::CloseCode, protocol::CloseFrame, Message},
+    tungstenite::{http::Request, Message},
     MaybeTlsStream, WebSocketStream,
 };
 use tokio::net::TcpStream;
@@ -20,6 +20,7 @@ type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 struct StreamingConnection {
     write: Arc<Mutex<futures_util::stream::SplitSink<WsStream, Message>>>,
     is_transmitting: Arc<AtomicBool>,
+    sent_since_open: Arc<AtomicBool>,
     is_alive: Arc<AtomicBool>,
     cancel_token: tokio_util::sync::CancellationToken,
     reader_task: tokio::task::JoinHandle<()>,
@@ -79,6 +80,15 @@ impl ElevenLabsStreamingClient {
     pub fn new() -> Self {
         Self {
             connection: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Returns whether any audio has been sent since the last gate open
+    pub async fn has_audio_since_open(&self) -> bool {
+        if let Some(conn) = self.connection.lock().await.as_ref() {
+            conn.sent_since_open.load(Ordering::Relaxed)
+        } else {
+            false
         }
     }
 
@@ -153,8 +163,9 @@ impl ElevenLabsStreamingClient {
         let (write, read) = ws_stream.split();
         let write = Arc::new(Mutex::new(write));
 
-        // Флаг для gate control
+        // Флаги для gate control
         let is_transmitting = Arc::new(AtomicBool::new(false));
+        let sent_since_open = Arc::new(AtomicBool::new(false));
         
         // Flag for connection liveness
         let is_alive = Arc::new(AtomicBool::new(true));
@@ -177,8 +188,10 @@ impl ElevenLabsStreamingClient {
         let keepalive_task = {
             let write = write.clone();
             let cancel_token = cancel_token.clone();
+            let is_transmitting = is_transmitting.clone();
+            let sample_rate_keep = sample_rate;
             tokio::spawn(async move {
-                keepalive_task(write, cancel_token).await;
+                keepalive_task(write, cancel_token, is_transmitting, sample_rate_keep).await;
             })
         };
 
@@ -186,6 +199,7 @@ impl ElevenLabsStreamingClient {
         *conn_guard = Some(StreamingConnection {
             write,
             is_transmitting,
+            sent_since_open,
             is_alive,
             cancel_token,
             reader_task,
@@ -216,6 +230,7 @@ impl ElevenLabsStreamingClient {
         }
 
         // Gate открыт - отправляем
+        conn.sent_since_open.store(true, Ordering::Relaxed);
         let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&pcm_data);
 
         let message = AudioChunkMessage {
@@ -245,6 +260,7 @@ impl ElevenLabsStreamingClient {
              return Err(anyhow!("Connection is dead"));
         }
 
+        conn.sent_since_open.store(false, Ordering::Relaxed);
         conn.is_transmitting.store(true, Ordering::Relaxed);
         log::info!("[ElevenLabs] Gate OPENED - transmitting audio");
         Ok(())
@@ -266,10 +282,16 @@ impl ElevenLabsStreamingClient {
             conn.is_transmitting.store(false, Ordering::Relaxed);
             log::info!("[ElevenLabs] Gate CLOSED - sending commit");
 
-            // Send 100ms of silence with commit=true
-            let silence_duration_sec = 0.1;
-            let sample_count = (conn.sample_rate as f32 * silence_duration_sec) as usize;
-            let silence_bytes = vec![0u8; sample_count * 2];
+            // If no audio was sent since gate open, skip commit to avoid input_error
+            if !conn.sent_since_open.load(Ordering::Relaxed) {
+                log::warn!("[ElevenLabs] No audio since gate opened; skipping commit");
+                return Ok(());
+            }
+
+            // Send commit with a very small silence to ensure proper segment finalization
+            let duration_ms: usize = 50;
+            let samples = (conn.sample_rate as usize * duration_ms) / 1000;
+            let silence_bytes = vec![0u8; samples * 2];
             let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&silence_bytes);
 
             let message = AudioChunkMessage {
@@ -286,6 +308,19 @@ impl ElevenLabsStreamingClient {
                 .context("Failed to send commit")?;
         } // Unlock mutex here
 
+        Ok(())
+    }
+
+    /// Закрыть gate без коммита (если аудио не было)
+    pub async fn close_gate(&self) -> Result<()> {
+        let conn_guard = self.connection.lock().await;
+        let conn = conn_guard
+            .as_ref()
+            .ok_or_else(|| anyhow!("Not connected"))?;
+        if !conn.is_alive.load(Ordering::Relaxed) {
+            return Err(anyhow!("Connection is dead"));
+        }
+        conn.is_transmitting.store(false, Ordering::Relaxed);
         Ok(())
     }
 
@@ -330,7 +365,7 @@ impl ElevenLabsStreamingClient {
 /// Background task для чтения сообщений из WebSocket
 async fn message_reader_task(
     mut read: futures_util::stream::SplitStream<WsStream>,
-    write: Arc<Mutex<futures_util::stream::SplitSink<WsStream, Message>>>,
+    _write: Arc<Mutex<futures_util::stream::SplitSink<WsStream, Message>>>,
     app_handle: AppHandle,
     cancel_token: tokio_util::sync::CancellationToken,
     is_alive: Arc<AtomicBool>,
@@ -344,16 +379,8 @@ async fn message_reader_task(
             msg_result = read.next() => {
                 match msg_result {
                     Some(Ok(Message::Text(text))) => {
-                        let should_close = handle_text_message(&text, &app_handle);
-                        if should_close {
-                            log::info!("[ElevenLabs] Received committed transcript, closing connection (Context Reset)");
-                            let mut write = write.lock().await;
-                            let _ = write.send(Message::Close(Some(CloseFrame {
-                                code: CloseCode::Library(4001),
-                                reason: "ContextReset".into(),
-                            }))).await;
-                            // Loop will break when Close frame is echoed back or stream ends
-                        }
+                        // Process message events; keep session open across commits to preserve context
+                        handle_text_message(&text, &app_handle);
                     }
                     Some(Ok(Message::Close(frame))) => {
                         log::info!("[ElevenLabs] WebSocket closed: {:?}", frame);
@@ -429,7 +456,7 @@ fn handle_text_message(text: &str, app_handle: &AppHandle) -> bool {
                     text: msg.text,
                     is_partial: false,
                 });
-                true // Signal to close connection
+                false
             }
             "error" | "auth_error" | "quota_exceeded_error" | "input_error" => {
                 log::error!("[ElevenLabs] Error received: {:?}", msg);
@@ -452,8 +479,11 @@ fn handle_text_message(text: &str, app_handle: &AppHandle) -> bool {
 async fn keepalive_task(
     write: Arc<Mutex<futures_util::stream::SplitSink<WsStream, Message>>>,
     cancel_token: tokio_util::sync::CancellationToken,
+    is_transmitting: Arc<AtomicBool>,
+    sample_rate: u32,
 ) {
-    let mut interval = interval(Duration::from_secs(5)); // Reduced to 5s
+    // Send a tiny silent audio keep-alive every few seconds when gate is closed
+    let mut interval = interval(Duration::from_secs(4));
 
     loop {
         tokio::select! {
@@ -462,11 +492,31 @@ async fn keepalive_task(
                 break;
             }
             _ = interval.tick() => {
-                log::debug!("[ElevenLabs] Sending keep-alive ping");
-                let mut write = write.lock().await;
-                if let Err(e) = write.send(Message::Ping(vec![])).await {
-                    log::error!("[ElevenLabs] Failed to send ping: {}", e);
-                    break;
+                if is_transmitting.load(Ordering::Relaxed) {
+                    continue;
+                }
+
+                // 20ms of silence in PCM16
+                let duration_ms: usize = 20;
+                let samples = (sample_rate as usize * duration_ms) / 1000;
+                let silence_bytes = vec![0u8; samples * 2];
+                let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&silence_bytes);
+
+                let message = AudioChunkMessage {
+                    message_type: "input_audio_chunk".to_string(),
+                    audio_base_64: audio_base64,
+                    sample_rate,
+                    commit: false,
+                };
+
+                if let Ok(json) = serde_json::to_string(&message) {
+                    let mut guard = write.lock().await;
+                    if let Err(e) = guard.send(Message::Text(json)).await {
+                        log::error!("[ElevenLabs] Failed to send keep-alive audio: {}", e);
+                        break;
+                    } else {
+                        log::trace!("[ElevenLabs] Sent silent keep-alive audio");
+                    }
                 }
             }
         }

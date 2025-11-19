@@ -7,6 +7,7 @@ use super::{
     hotkey,
     state::AppState,
 };
+use cpal::traits::{DeviceTrait, HostTrait};
 
 #[tauri::command]
 pub async fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
@@ -100,10 +101,31 @@ pub async fn elevenlabs_streaming_connect(
     sample_rate: u32,
     language_code: String,
 ) -> Result<(), String> {
-    // 1. Connect to WebSocket
+    // Determine actual input device sample rate to avoid mismatches with server format
+    let actual_sample_rate = {
+        let host = cpal::default_host();
+        if let Some(device) = host.default_input_device() {
+            match device.default_input_config() {
+                Ok(cfg) => cfg.sample_rate().0,
+                Err(_) => sample_rate,
+            }
+        } else {
+            sample_rate
+        }
+    };
+
+    if actual_sample_rate != sample_rate {
+        log::info!(
+            "[Commands] Overriding requested sample rate {} Hz with device rate {} Hz",
+            sample_rate,
+            actual_sample_rate
+        );
+    }
+
+    // 1. Connect to WebSocket using the actual device sample rate
     state
         .elevenlabs_streaming()
-        .connect(api_key, sample_rate, language_code, app.clone())
+        .connect(api_key, actual_sample_rate, language_code, app.clone())
         .await
         .map_err(|e| e.to_string())?;
 

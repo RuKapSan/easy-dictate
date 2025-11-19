@@ -19,12 +19,12 @@ let currentProvider = null;
 // Store last config for reconnection
 let lastApiKey = "";
 let lastSampleRate = 48000;
-let lastLanguageCode = "ru";
+let lastLanguageCode = "auto";
 
 /**
  * Connect to ElevenLabs streaming STT via Rust backend
  */
-async function connectElevenLabsStreaming(apiKey, sampleRate = 48000, languageCode = "ru") {
+async function connectElevenLabsStreaming(apiKey, sampleRate = 48000, languageCode = "auto") {
   if (!window.__TAURI__?.core?.invoke) {
     console.error("[ElevenLabs STT] Tauri invoke not available");
     return false;
@@ -139,25 +139,8 @@ async function initElevenLabsStreaming(settings) {
       return;
     }
 
-    // Determine language code from target_language
-    let languageCode = "en"; // default
-    const targetLang = settings.target_language?.toLowerCase() || "";
-
-    if (targetLang.includes("рус") || targetLang.includes("rus")) {
-      languageCode = "ru";
-    } else if (targetLang.includes("укр") || targetLang.includes("ukr")) {
-      languageCode = "uk";
-    } else if (targetLang.includes("исп") || targetLang.includes("spa")) {
-      languageCode = "es";
-    } else if (targetLang.includes("фра") || targetLang.includes("fra")) {
-      languageCode = "fr";
-    } else if (targetLang.includes("нем") || targetLang.includes("ger")) {
-      languageCode = "de";
-    } else if (targetLang.includes("кит") || targetLang.includes("chi")) {
-      languageCode = "zh";
-    } else if (targetLang.includes("япо") || targetLang.includes("jap")) {
-      languageCode = "ja";
-    }
+    // Prefer automatic language detection for streaming
+    let languageCode = "auto";
 
     // Always try to connect/reconnect if needed
     log(`Initializing with language: ${languageCode}`);
@@ -214,28 +197,16 @@ function setupElevenLabsEventListeners() {
 
     log(`Connection closed. Code: ${code}, Reason: ${reason}`, "info");
 
-    // 4001 = Context Reset (Backend requested reset)
-    if (code === 4001) {
-      log("Context reset requested. Reconnecting immediately...", "info");
-      connectElevenLabsStreaming(lastApiKey, lastSampleRate, lastLanguageCode);
-      return;
-    }
-
-    // 1000 = Normal Closure
-    if (code === 1000) {
-      log("Normal closure detected. Not reconnecting.", "info");
-      isConnected = false;
-      return;
-    }
-
-    log("Connection closed unexpectedly. Attempting to reconnect in 3s...", "warn");
+    // Reconnect on context reset (4001) and normal closure (1000) as well as any other code
     isConnected = false;
+    const delayMs = code === 4001 ? 100 : 1000;
+    log(`Scheduling reconnect in ${delayMs}ms...`);
     setTimeout(() => {
       if (currentProvider === "elevenlabs" && lastApiKey) {
         log("Reconnecting...");
         connectElevenLabsStreaming(lastApiKey, lastSampleRate, lastLanguageCode);
       }
-    }, 3000);
+    }, delayMs);
   });
 
   // Handle errors

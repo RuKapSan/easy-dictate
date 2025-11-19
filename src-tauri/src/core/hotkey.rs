@@ -65,7 +65,50 @@ pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
             }
             return Ok(());
         } else {
-            log::warn!("[Hotkey] ElevenLabs provider selected but streaming NOT connected. Falling back to standard recording.");
+            // Попробуем быстро переподключиться к стримингу и сразу открыть gate
+            log::warn!("[Hotkey] ElevenLabs selected but streaming NOT connected. Attempting quick reconnect...");
+
+            let api_key = settings.elevenlabs_api_key.trim().to_string();
+            if api_key.is_empty() {
+                log::warn!("[Hotkey] ElevenLabs API key is empty; falling back to standard recording.");
+            } else {
+                // Используем встроенную команду подключения (определит реальный sample rate)
+                let state_clone = state.clone();
+                let connect_res = tauri::async_runtime::block_on(
+                    crate::core::commands::elevenlabs_streaming_connect(
+                        app.clone(),
+                        state_clone,
+                        api_key,
+                        48_000,
+                        "auto".to_string(),
+                    )
+                );
+
+                match connect_res {
+                    Ok(()) => {
+                        // Проверяем состояние и открываем gate
+                        let reconnected = tauri::async_runtime::block_on(
+                            state.elevenlabs_streaming().is_connected()
+                        );
+                        if reconnected {
+                            log::info!("[Hotkey] Reconnected. Opening gate...");
+                            if let Err(e) = tauri::async_runtime::block_on(
+                                state.elevenlabs_streaming().open_gate()
+                            ) {
+                                emit_error(app, &format!("Failed to open gate after reconnect: {}", e));
+                            } else {
+                                emit_status(app, StatusPhase::Recording, Some("Streaming..."));
+                                return Ok(());
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        log::error!("[Hotkey] Failed to reconnect ElevenLabs streaming: {}", err);
+                    }
+                }
+            }
+
+            log::warn!("[Hotkey] Falling back to standard recording.");
         }
     }
 
@@ -112,14 +155,27 @@ pub fn handle_hotkey_released(app: &AppHandle) -> Result<()> {
         );
 
         if is_streaming_connected {
-            // Gated streaming режим - закрываем gate и отправляем commit
-            log::info!("[Hotkey] ElevenLabs gated streaming - closing gate and committing");
-            if let Err(e) = tauri::async_runtime::block_on(
-                state.elevenlabs_streaming().close_gate_and_commit()
-            ) {
-                emit_error(app, &format!("Failed to close gate: {}", e));
+            // Если не было аудио, не отправляем commit и не переходим в Processing
+            let had_audio = tauri::async_runtime::block_on(
+                state.elevenlabs_streaming().has_audio_since_open()
+            );
+
+            if !had_audio {
+                log::info!("[Hotkey] No audio since gate opened; closing gate without commit");
+                let _ = tauri::async_runtime::block_on(
+                    state.elevenlabs_streaming().close_gate()
+                );
+                emit_status(app, StatusPhase::Idle, Some("Ready for next transcription"));
             } else {
-                emit_status(app, StatusPhase::Transcribing, Some("Processing..."));
+                // Gated streaming режим - закрываем gate и отправляем commit
+                log::info!("[Hotkey] ElevenLabs gated streaming - closing gate and committing");
+                if let Err(e) = tauri::async_runtime::block_on(
+                    state.elevenlabs_streaming().close_gate_and_commit()
+                ) {
+                    emit_error(app, &format!("Failed to close gate: {}", e));
+                } else {
+                    emit_status(app, StatusPhase::Transcribing, Some("Processing..."));
+                }
             }
             return Ok(());
         }
