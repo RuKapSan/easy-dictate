@@ -30,9 +30,7 @@
         "decorations": false,
         "skipTaskbar": true,
         "visible": false,
-        "width": 800,
-        "height": 200,
-        "center": true,
+        "fullscreen": true,
         "resizable": false,
         "shadow": false
       }
