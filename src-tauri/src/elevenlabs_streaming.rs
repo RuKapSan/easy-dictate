@@ -344,7 +344,7 @@ impl ElevenLabsStreamingClient {
             }
 
             // Send small silence then commit=true
-            let duration_ms: usize = 50;
+            let duration_ms: usize = 1;
             let samples = (conn.sample_rate as usize * duration_ms) / 1000;
             let silence_bytes = vec![0u8; samples * 2];
             let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&silence_bytes);
