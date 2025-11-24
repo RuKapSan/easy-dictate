@@ -28,7 +28,6 @@ struct StreamingConnection {
     reader_task: tokio::task::JoinHandle<()>,
     keepalive_task: tokio::task::JoinHandle<()>,
     sample_rate: u32,
-    audio_format: String,
     app_handle: AppHandle,
 }
 
@@ -93,18 +92,6 @@ impl ElevenLabsStreamingClient {
             connection: Arc::new(Mutex::new(None)),
             last_config: Arc::new(Mutex::new(None)),
         }
-    }
-
-    /// Подключиться используя сохранённую конфигурацию
-    pub async fn connect_with_last_config(&self, app_handle: AppHandle) -> Result<()> {
-        let cfg = {
-            let guard = self.last_config.lock().await;
-            guard.clone()
-        };
-        let Some(cfg) = cfg else {
-            return Err(anyhow!("No previous connection config available"));
-        };
-        self.connect(cfg.api_key, cfg.sample_rate, cfg.language_code, app_handle).await
     }
 
     /// Retrieve the last used connection configuration
@@ -258,7 +245,6 @@ impl ElevenLabsStreamingClient {
             reader_task,
             keepalive_task,
             sample_rate,
-            audio_format: audio_format.to_string(),
             app_handle,
         });
 

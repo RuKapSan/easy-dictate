@@ -19,7 +19,6 @@ pub struct ContinuousAudioCapture {
     is_running: Arc<AtomicBool>,
     audio_tx: Option<mpsc::Sender<Vec<u8>>>,
     sample_rate: u32,
-    channels: u16,
 }
 
 impl ContinuousAudioCapture {
@@ -29,7 +28,6 @@ impl ContinuousAudioCapture {
             is_running: Arc::new(AtomicBool::new(false)),
             audio_tx: None,
             sample_rate: 0,
-            channels: 0,
         })
     }
 
@@ -53,22 +51,21 @@ impl ContinuousAudioCapture {
         let config: cpal::StreamConfig = config.into();
 
         self.sample_rate = config.sample_rate.0;
-        self.channels = config.channels;
+        let channels = config.channels as usize;
 
         log::info!(
-            "[AudioStream] Starting continuous capture: {} Hz, {} channels, format: {:?}",
+            "[AudioStream] Starting continuous capture: {} Hz, {} channels (-> mono), format: {:?}",
             self.sample_rate,
-            self.channels,
+            channels,
             sample_format
         );
 
         // Use bounded channel to prevent memory exhaustion if receiver can't keep up
         let (tx, rx) = mpsc::channel(MAX_AUDIO_BUFFER_SIZE);
         self.audio_tx = Some(tx.clone());
-
-        let channels = config.channels as usize;
         let chunk_size_ms = 100; // 100ms chunks
-        let samples_per_chunk = (self.sample_rate as usize * chunk_size_ms / 1000) * channels;
+        // Output is mono regardless of input channels, so samples_per_chunk is for 1 channel
+        let samples_per_chunk = self.sample_rate as usize * chunk_size_ms / 1000;
 
         let stream = build_streaming_input(
             &device,
@@ -106,16 +103,8 @@ impl ContinuousAudioCapture {
         Ok(())
     }
 
-    pub fn is_running(&self) -> bool {
-        self.is_running.load(Ordering::Acquire)
-    }
-
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
-    }
-
-    pub fn channels(&self) -> u16 {
-        self.channels
     }
 }
 
@@ -164,12 +153,15 @@ fn build_stream<T: Sample + SizedSample + Send + 'static>(
     let stream = device.build_input_stream(
         config,
         move |data: &[T], _| {
-            // Convert samples to PCM16 and add to buffer
+            // Convert samples to PCM16 mono (average all channels)
             for frame in data.chunks(channels) {
+                // Average all channels to mono
+                let mut sum: i32 = 0;
                 for &sample in frame {
-                    let pcm16 = convert(sample);
-                    buffer.extend_from_slice(&pcm16.to_le_bytes());
+                    sum += convert(sample) as i32;
                 }
+                let mono_sample = (sum / channels as i32) as i16;
+                buffer.extend_from_slice(&mono_sample.to_le_bytes());
             }
 
             // If we have enough data, send a chunk

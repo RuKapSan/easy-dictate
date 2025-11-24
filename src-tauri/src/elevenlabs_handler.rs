@@ -186,24 +186,24 @@ async fn output_text(
         let keyboard = state.transcription().keyboard();
         let text_clone = text.to_string();
 
-        // Run in blocking task to avoid blocking async runtime
-        tauri::async_runtime::spawn_blocking(move || {
-            if let Err(e) = keyboard.type_text(&text_clone) {
-                log::error!("[ElevenLabs Handler] Failed to type text: {}", e);
-            }
-        });
+        // Run in blocking task and wait for completion
+        if let Err(e) = tauri::async_runtime::spawn_blocking(move || {
+            keyboard.type_text(&text_clone)
+        }).await.map_err(|e| anyhow::anyhow!("Task join error: {}", e))? {
+            log::error!("[ElevenLabs Handler] Failed to type text: {}", e);
+        }
     } else {
         // Вставка через буфер обмена
         log::info!("[ElevenLabs Handler] Pasting text via clipboard");
         app.clipboard().write_text(text)?;
 
-        // Эмулируем Ctrl+V
+        // Эмулируем Ctrl+V и ждём завершения
         let keyboard = state.transcription().keyboard();
-        tauri::async_runtime::spawn_blocking(move || {
-            if let Err(e) = keyboard.paste() {
-                log::error!("[ElevenLabs Handler] Failed to paste: {}", e);
-            }
-        });
+        if let Err(e) = tauri::async_runtime::spawn_blocking(move || {
+            keyboard.paste()
+        }).await.map_err(|e| anyhow::anyhow!("Task join error: {}", e))? {
+            log::error!("[ElevenLabs Handler] Failed to paste: {}", e);
+        }
     }
 
     Ok(())

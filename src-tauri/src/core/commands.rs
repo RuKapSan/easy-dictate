@@ -77,10 +77,9 @@ pub(crate) fn apply_autostart(app: &AppHandle, should_enable: bool) -> Result<()
         let manager = app.autolaunch();
 
         if should_enable {
-            // Set custom args for autostart
-            if let Ok(_exe_path) = std::env::current_exe() {
-                std::env::set_var("TAURI_AUTOSTART_ARGS", "--autostart");
-            }
+            // Note: TAURI_AUTOSTART_ARGS is read at compile time by tauri-plugin-autostart,
+            // so setting it at runtime has no effect. The --autostart flag is configured
+            // in tauri.conf.json or via the plugin's builder instead.
             manager.enable().map_err(|err| err.to_string())?;
         } else {
             manager.disable().map_err(|err| err.to_string())?;

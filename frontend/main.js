@@ -349,14 +349,16 @@ function syncCustomInstructionsUi() {
 }
 
 function updateProviderFields() {
-  const provider = providerSelect.value;
+  const provider = providerSelect?.value;
+  if (!provider) return;
+
   const isGroq = provider === "groq";
   const isElevenLabs = provider === "elevenlabs";
 
   // Update API key labels visibility
-  openaiApiKeyLabel.hidden = isElevenLabs; // Hide OpenAI key for ElevenLabs
-  groqApiKeyLabel.hidden = !isGroq;
-  elevenlabsApiKeyLabel.hidden = !isElevenLabs;
+  if (openaiApiKeyLabel) openaiApiKeyLabel.hidden = isElevenLabs; // Hide OpenAI key for ElevenLabs
+  if (groqApiKeyLabel) groqApiKeyLabel.hidden = !isGroq;
+  if (elevenlabsApiKeyLabel) elevenlabsApiKeyLabel.hidden = !isElevenLabs;
 
   // Update hint for OpenAI API key
   const openaiHint = document.getElementById("openai-api-hint");
@@ -632,7 +634,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   await loadSettings();
   if (tauriApp?.getVersion) {
     try {
-      document.getElementById("app-version").textContent = await tauriApp.getVersion();
+      const versionEl = document.getElementById("app-version");
+      if (versionEl) {
+        versionEl.textContent = await tauriApp.getVersion();
+      }
     } catch (error) {
       console.error(error);
     }
@@ -663,7 +668,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
 
     await listen("transcription://partial", ({ payload }) => {
-      if (!payload?.text) return;
+      if (!payload?.text || !resultEl) return;
       resultEl.hidden = false;
       resultEl.classList.add("partial");
       resultEl.textContent = payload.text;
@@ -671,10 +676,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
 
     await listen("transcription://complete", ({ payload }) => {
-      resultEl.classList.remove("partial");
-      if (payload?.text) {
-        resultEl.hidden = false;
-        resultEl.textContent = payload.text;
+      if (resultEl) {
+        resultEl.classList.remove("partial");
+        if (payload?.text) {
+          resultEl.hidden = false;
+          resultEl.textContent = payload.text;
+        }
       }
       showToast("Готово", "success");
       setStatus("success", "Обработка завершена");
