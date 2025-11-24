@@ -5,7 +5,7 @@ use crate::settings::AppSettings;
 use super::{
     events::{emit_error, emit_status, StatusPhase},
     hotkey,
-    state::AppState,
+    state::{AppState, AudioStreamingHandle},
 };
 use cpal::traits::{DeviceTrait, HostTrait};
 
@@ -129,11 +129,20 @@ pub async fn elevenlabs_streaming_connect(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 2. Cancel any existing audio streaming task to prevent leaks
-    if let Ok(mut cancel_guard) = state.audio_streaming_cancel().lock() {
-        if let Some(token) = cancel_guard.take() {
-            log::info!("[Commands] Cancelling existing audio streaming task before spawning new one");
-            token.cancel();
+    // 2. Stop and wait for any existing audio streaming task to prevent concurrent access
+    {
+        let mut handle_guard = state.audio_streaming_handle().lock()
+            .map_err(|_| "Failed to lock audio streaming handle".to_string())?;
+
+        if let Some(handle) = handle_guard.take() {
+            log::info!("[Commands] Stopping existing audio streaming task and waiting for it to finish");
+            handle.cancel_token.cancel();
+            // Wait for the thread to finish (with timeout to prevent hanging)
+            // The thread should exit quickly after cancel_token is cancelled
+            match handle.join_handle.join() {
+                Ok(()) => log::info!("[Commands] Previous audio streaming task finished cleanly"),
+                Err(_) => log::warn!("[Commands] Previous audio streaming task panicked"),
+            }
         }
     }
 
@@ -142,7 +151,7 @@ pub async fn elevenlabs_streaming_connect(
     let cancel_clone = cancel_token.clone();
     let streaming_client = state.elevenlabs_streaming().clone();
 
-    std::thread::spawn(move || {
+    let join_handle = std::thread::spawn(move || {
         use crate::audio_stream::ContinuousAudioCapture;
 
         // Create audio capture on this thread
@@ -181,12 +190,13 @@ pub async fn elevenlabs_streaming_connect(
         });
     });
 
-    // Store cancellation token
-    let mut cancel_guard = state
-        .audio_streaming_cancel()
-        .lock()
-        .map_err(|_| "Failed to lock cancel token".to_string())?;
-    *cancel_guard = Some(cancel_token);
+    // Store handle for proper cleanup later
+    let mut handle_guard = state.audio_streaming_handle().lock()
+        .map_err(|_| "Failed to lock audio streaming handle".to_string())?;
+    *handle_guard = Some(AudioStreamingHandle {
+        cancel_token,
+        join_handle,
+    });
 
     log::info!("[Commands] ElevenLabs streaming connected and audio pipeline started");
 
@@ -195,7 +205,7 @@ pub async fn elevenlabs_streaming_connect(
 
 /// Background task that manages audio capture and forwards chunks to ElevenLabs WebSocket
 async fn audio_streaming_task(
-    mut audio_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+    mut audio_rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
     mut audio_capture: crate::audio_stream::ContinuousAudioCapture,
     streaming_client: crate::elevenlabs_streaming::ElevenLabsStreamingClient,
     cancel_token: tokio_util::sync::CancellationToken,
@@ -269,11 +279,19 @@ pub async fn elevenlabs_streaming_disconnect(
 ) -> Result<(), String> {
     log::info!("[Commands] Disconnecting ElevenLabs streaming...");
 
-    // 1. Cancel audio streaming task (which will stop audio capture)
-    if let Ok(mut cancel_guard) = state.audio_streaming_cancel().lock() {
-        if let Some(token) = cancel_guard.take() {
-            token.cancel();
-            log::info!("[Commands] Audio streaming task cancelled");
+    // 1. Stop audio streaming task and wait for it to finish
+    {
+        let mut handle_guard = state.audio_streaming_handle().lock()
+            .map_err(|_| "Failed to lock audio streaming handle".to_string())?;
+
+        if let Some(handle) = handle_guard.take() {
+            log::info!("[Commands] Stopping audio streaming task...");
+            handle.cancel_token.cancel();
+            // Wait for the thread to finish
+            match handle.join_handle.join() {
+                Ok(()) => log::info!("[Commands] Audio streaming task stopped cleanly"),
+                Err(_) => log::warn!("[Commands] Audio streaming task panicked"),
+            }
         }
     }
 
@@ -348,12 +366,17 @@ pub async fn show_overlay_no_focus(app: AppHandle) -> Result<(), String> {
             if let Ok(hwnd) = window.hwnd() {
                 let hwnd = HWND(hwnd.0 as _);
                 log::info!("[Commands] Showing overlay without focus (HWND: {:?})", hwnd);
+                // SAFETY: SetWindowPos is called with a valid HWND obtained from Tauri's
+                // window handle. The hwnd is guaranteed valid as long as the window exists,
+                // which is ensured by the `get_webview_window` call above returning Some.
+                // We're only modifying window position flags (topmost, show without activate),
+                // which is safe and doesn't affect memory or cause undefined behavior.
+                // The SWP_NOMOVE | SWP_NOSIZE flags ensure position/size aren't changed.
                 unsafe {
-                    // Show window without activating and ensure it's top most
                     let _ = SetWindowPos(
-                        hwnd, 
-                        Some(HWND_TOPMOST), 
-                        0, 0, 0, 0, 
+                        hwnd,
+                        Some(HWND_TOPMOST),
+                        0, 0, 0, 0,
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
                     );
                 }

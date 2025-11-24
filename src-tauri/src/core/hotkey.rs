@@ -1,4 +1,4 @@
-﻿use std::sync::atomic::Ordering;
+use std::sync::atomic::Ordering;
 
 use anyhow::{anyhow, Result};
 use tauri::{AppHandle, Manager, State};
@@ -14,7 +14,9 @@ use super::{
 
 pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
     let shortcuts: State<'_, GlobalShortcut<tauri::Wry>> = app.state();
-    shortcuts.unregister_all().ok();
+    if let Err(e) = shortcuts.unregister_all() {
+        log::warn!("[Hotkey] Failed to unregister shortcuts: {}", e);
+    }
 
     let hotkey = settings.normalized_hotkey();
     let hotkey_clone = hotkey.clone();
@@ -23,14 +25,10 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
             hotkey.as_str(),
             move |app_handle, _shortcut, event| match event.state {
                 ShortcutState::Pressed => {
-                    if let Err(err) = handle_hotkey_pressed(app_handle) {
-                        emit_error(app_handle, &err.to_string());
-                    }
+                    handle_hotkey_pressed(app_handle);
                 }
                 ShortcutState::Released => {
-                    if let Err(err) = handle_hotkey_released(app_handle) {
-                        emit_error(app_handle, &err.to_string());
-                    }
+                    handle_hotkey_released(app_handle);
                 }
             },
         )
@@ -39,22 +37,34 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
+/// Handle hotkey press event - spawns async task to avoid blocking the event thread
+pub fn handle_hotkey_pressed(app: &AppHandle) {
+    let app_clone = app.clone();
+
+    // Spawn async task to handle the press without blocking
+    tauri::async_runtime::spawn(async move {
+        if let Err(err) = handle_hotkey_pressed_async(&app_clone).await {
+            emit_error(&app_clone, &err.to_string());
+        }
+    });
+}
+
+/// Async implementation of hotkey press handling
+async fn handle_hotkey_pressed_async(app: &AppHandle) -> Result<()> {
     let state: State<'_, AppState> = app.state();
 
-    // Получаем настройки для проверки провайдера
-    let settings = tauri::async_runtime::block_on(state.current_settings());
+    // Get settings once at the beginning
+    let settings = state.current_settings().await;
+    let is_streaming_connected = state.elevenlabs_streaming().is_connected().await;
 
-    // Проверяем - используем ли gated streaming для ElevenLabs
-    log::info!("[Hotkey] Pressed. Provider: {:?}, Streaming connected: {}", settings.provider, tauri::async_runtime::block_on(state.elevenlabs_streaming().is_connected()));
+    log::info!(
+        "[Hotkey] Pressed. Provider: {:?}, Streaming connected: {}",
+        settings.provider,
+        is_streaming_connected
+    );
 
     if settings.provider == TranscriptionProvider::ElevenLabs {
-        let is_streaming_connected = tauri::async_runtime::block_on(
-            state.elevenlabs_streaming().is_connected()
-        );
-        let is_committing = tauri::async_runtime::block_on(
-            state.elevenlabs_streaming().is_committing()
-        );
+        let is_committing = state.elevenlabs_streaming().is_committing().await;
 
         if !is_streaming_connected || is_committing {
             log::info!(
@@ -64,48 +74,50 @@ pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
             );
 
             let mut connected = false;
-            
+
             // Try to reconnect using last config (including audio stream restart)
-            if let Some((api_key, sample_rate, language_code)) = tauri::async_runtime::block_on(
-                state.elevenlabs_streaming().get_last_config()
-            ) {
-                log::info!("[Hotkey] Reconnecting with last config: rate={}, lang={}", sample_rate, language_code);
-                let state_clone = state.clone();
-                connected = tauri::async_runtime::block_on(
-                    crate::core::commands::elevenlabs_streaming_connect(
-                        app.clone(),
-                        state_clone,
-                        api_key,
-                        sample_rate,
-                        language_code,
-                    )
-                ).is_ok();
+            if let Some((api_key, sample_rate, language_code)) =
+                state.elevenlabs_streaming().get_last_config().await
+            {
+                log::info!(
+                    "[Hotkey] Reconnecting with last config: rate={}, lang={}",
+                    sample_rate,
+                    language_code
+                );
+                connected = crate::core::commands::elevenlabs_streaming_connect(
+                    app.clone(),
+                    state.clone(),
+                    api_key,
+                    sample_rate,
+                    language_code,
+                )
+                .await
+                .is_ok();
             }
 
             // Fallback to settings if no last config or reconnection failed
             if !connected {
                 let api_key = settings.elevenlabs_api_key.trim().to_string();
                 if api_key.is_empty() {
-                    log::warn!("[Hotkey] ElevenLabs API key is empty; falling back to standard recording.");
+                    log::warn!(
+                        "[Hotkey] ElevenLabs API key is empty; falling back to standard recording."
+                    );
                 } else {
-                    let state_clone = state.clone();
-                    connected = tauri::async_runtime::block_on(
-                        crate::core::commands::elevenlabs_streaming_connect(
-                            app.clone(),
-                            state_clone,
-                            api_key,
-                            48_000,
-                            "auto".to_string(),
-                        )
-                    ).is_ok();
+                    connected = crate::core::commands::elevenlabs_streaming_connect(
+                        app.clone(),
+                        state.clone(),
+                        api_key,
+                        48_000,
+                        "auto".to_string(),
+                    )
+                    .await
+                    .is_ok();
                 }
             }
 
             if connected {
                 log::info!("[Hotkey] Clean session ready. Opening gate...");
-                if let Err(e) = tauri::async_runtime::block_on(
-                    state.elevenlabs_streaming().open_gate()
-                ) {
+                if let Err(e) = state.elevenlabs_streaming().open_gate().await {
                     emit_error(app, &format!("Failed to open gate: {}", e));
                 } else {
                     emit_status(app, StatusPhase::Recording, Some("Streaming..."));
@@ -116,9 +128,7 @@ pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
         } else {
             // Already connected and not committing: open gate
             log::info!("[Hotkey] ElevenLabs gated streaming - opening gate");
-            if let Err(e) = tauri::async_runtime::block_on(
-                state.elevenlabs_streaming().open_gate()
-            ) {
+            if let Err(e) = state.elevenlabs_streaming().open_gate().await {
                 emit_error(app, &format!("Failed to open gate: {}", e));
             } else {
                 emit_status(app, StatusPhase::Recording, Some("Streaming..."));
@@ -127,7 +137,7 @@ pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
         }
     }
 
-    // Старый режим - recording
+    // Legacy recording mode
     if state.is_transcribing().load(Ordering::SeqCst) {
         emit_status(
             app,
@@ -157,73 +167,74 @@ pub fn handle_hotkey_pressed(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_hotkey_released(app: &AppHandle) -> Result<()> {
+/// Handle hotkey release event - spawns async task for streaming, sync for legacy recording
+pub fn handle_hotkey_released(app: &AppHandle) {
     let state: State<'_, AppState> = app.state();
 
-    // Получаем настройки для проверки провайдера
-    let settings = tauri::async_runtime::block_on(state.current_settings());
+    // For legacy recording mode, we need to stop the recording synchronously
+    // to capture the audio data before it's lost
+    let active: Option<RecordingSession> = {
+        if let Ok(mut guard) = state.active_recording().lock() {
+            guard.take()
+        } else {
+            None
+        }
+    };
 
-    // Проверяем - используем ли gated streaming для ElevenLabs
+    if let Some(active) = active {
+        // Handle legacy recording stop synchronously
+        match active.stop() {
+            Ok(audio_wav) => {
+                if state.is_transcribing().swap(true, Ordering::SeqCst) {
+                    return;
+                }
+                emit_status(app, StatusPhase::Transcribing, Some("Uploading audio..."));
+                transcription::spawn_transcription(app, audio_wav);
+            }
+            Err(err) => emit_error(app, &err.to_string()),
+        }
+        return;
+    }
+
+    // For ElevenLabs streaming, spawn async task
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(err) = handle_hotkey_released_async(&app_clone).await {
+            emit_error(&app_clone, &err.to_string());
+        }
+    });
+}
+
+/// Async implementation of hotkey release handling for streaming mode
+async fn handle_hotkey_released_async(app: &AppHandle) -> Result<()> {
+    let state: State<'_, AppState> = app.state();
+    let settings = state.current_settings().await;
+
+    // Check if using gated streaming for ElevenLabs
     if settings.provider == TranscriptionProvider::ElevenLabs {
-        let is_streaming_connected = tauri::async_runtime::block_on(
-            state.elevenlabs_streaming().is_connected()
-        );
+        let is_streaming_connected = state.elevenlabs_streaming().is_connected().await;
 
         if is_streaming_connected {
-            // Если не было аудио, не отправляем commit и не переходим в Processing
-            let had_audio = tauri::async_runtime::block_on(
-                state.elevenlabs_streaming().has_audio_since_open()
-            );
+            // If no audio was captured, don't send commit
+            let had_audio = state.elevenlabs_streaming().has_audio_since_open().await;
 
             if !had_audio {
                 log::info!("[Hotkey] No audio since gate opened; closing gate without commit");
-                let _ = tauri::async_runtime::block_on(
-                    state.elevenlabs_streaming().close_gate()
-                );
+                let _ = state.elevenlabs_streaming().close_gate().await;
                 emit_status(app, StatusPhase::Idle, Some("Ready for next transcription"));
             } else {
-                // Gated streaming режим - закрываем gate и отправляем commit
+                // Gated streaming mode - close gate and send commit
                 log::info!("[Hotkey] ElevenLabs gated streaming - closing gate and committing");
-                
-                // Emit processing status BEFORE waiting for commit, to avoid overwriting "Idle" status
-                // that comes from the handler when transcript is received.
+
+                // Emit processing status BEFORE waiting for commit
                 emit_status(app, StatusPhase::Transcribing, Some("Processing..."));
 
-                if let Err(e) = tauri::async_runtime::block_on(
-                    state.elevenlabs_streaming().close_gate_and_commit()
-                ) {
+                if let Err(e) = state.elevenlabs_streaming().close_gate_and_commit().await {
                     emit_error(app, &format!("Failed to close gate: {}", e));
-                    // If failed, revert to idle
                     emit_status(app, StatusPhase::Idle, Some("Ready for next transcription"));
                 }
             }
-            return Ok(());
         }
-    }
-
-    // Старый режим - recording
-    let active: Option<RecordingSession> = {
-        let mut guard = state
-            .active_recording()
-            .lock()
-            .map_err(|_| anyhow!("Failed to lock active recording state"))?;
-        guard.take()
-    };
-
-    let Some(active) = active else {
-        return Ok(());
-    };
-
-    match active.stop() {
-        Ok(audio_wav) => {
-            if state.is_transcribing().swap(true, Ordering::SeqCst) {
-                return Ok(());
-            }
-
-            emit_status(app, StatusPhase::Transcribing, Some("Uploading audio..."));
-            transcription::spawn_transcription(app, audio_wav);
-        }
-        Err(err) => emit_error(app, &err.to_string()),
     }
 
     Ok(())

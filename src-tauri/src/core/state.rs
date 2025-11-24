@@ -1,4 +1,5 @@
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
+use std::thread::JoinHandle;
 
 use anyhow::Result;
 use tauri::menu::MenuItem;
@@ -17,6 +18,12 @@ use crate::{
 
 use super::transcription::TranscriptionService;
 
+/// Handle for managing an audio streaming thread
+pub struct AudioStreamingHandle {
+    pub cancel_token: tokio_util::sync::CancellationToken,
+    pub join_handle: JoinHandle<()>,
+}
+
 pub struct AppState {
     settings_store: SettingsStore,
     settings: RwLock<AppSettings>,
@@ -24,7 +31,7 @@ pub struct AppState {
     active_recording: Mutex<Option<RecordingSession>>,
     transcription: TranscriptionService,
     elevenlabs_streaming: ElevenLabsStreamingClient,
-    audio_streaming_cancel: Mutex<Option<tokio_util::sync::CancellationToken>>,
+    audio_streaming_handle: Mutex<Option<AudioStreamingHandle>>,
     is_transcribing: AtomicBool,
     tray_status_item: Mutex<Option<MenuItem<tauri::Wry>>>,
 }
@@ -50,7 +57,7 @@ impl AppState {
             active_recording: Mutex::new(None),
             transcription,
             elevenlabs_streaming,
-            audio_streaming_cancel: Mutex::new(None),
+            audio_streaming_handle: Mutex::new(None),
             is_transcribing: AtomicBool::new(false),
             tray_status_item: Mutex::new(None),
         })
@@ -92,7 +99,7 @@ impl AppState {
         &self.elevenlabs_streaming
     }
 
-    pub fn audio_streaming_cancel(&self) -> &Mutex<Option<tokio_util::sync::CancellationToken>> {
-        &self.audio_streaming_cancel
+    pub fn audio_streaming_handle(&self) -> &Mutex<Option<AudioStreamingHandle>> {
+        &self.audio_streaming_handle
     }
 }

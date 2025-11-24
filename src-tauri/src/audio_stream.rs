@@ -9,11 +9,15 @@ use cpal::{
 };
 use tokio::sync::mpsc;
 
+/// Maximum number of audio chunks to buffer before dropping (prevents memory exhaustion)
+/// With 100ms chunks, this is ~5 seconds of audio
+const MAX_AUDIO_BUFFER_SIZE: usize = 50;
+
 /// Continuous audio capture for ElevenLabs streaming
 pub struct ContinuousAudioCapture {
     stream: Option<Stream>,
     is_running: Arc<AtomicBool>,
-    audio_tx: Option<mpsc::UnboundedSender<Vec<u8>>>,
+    audio_tx: Option<mpsc::Sender<Vec<u8>>>,
     sample_rate: u32,
     channels: u16,
 }
@@ -31,8 +35,8 @@ impl ContinuousAudioCapture {
 
     /// Starts continuous audio capture
     /// Returns a receiver for audio chunks (PCM16 little-endian)
-    pub fn start(&mut self) -> Result<mpsc::UnboundedReceiver<Vec<u8>>> {
-        if self.is_running.load(Ordering::Relaxed) {
+    pub fn start(&mut self) -> Result<mpsc::Receiver<Vec<u8>>> {
+        if self.is_running.load(Ordering::Acquire) {
             return Err(anyhow!("Audio capture already running"));
         }
 
@@ -58,7 +62,8 @@ impl ContinuousAudioCapture {
             sample_format
         );
 
-        let (tx, rx) = mpsc::unbounded_channel();
+        // Use bounded channel to prevent memory exhaustion if receiver can't keep up
+        let (tx, rx) = mpsc::channel(MAX_AUDIO_BUFFER_SIZE);
         self.audio_tx = Some(tx.clone());
 
         let channels = config.channels as usize;
@@ -76,7 +81,7 @@ impl ContinuousAudioCapture {
 
         stream.play().context("Failed to start audio stream")?;
         self.stream = Some(stream);
-        self.is_running.store(true, Ordering::Relaxed);
+        self.is_running.store(true, Ordering::Release);
 
         log::info!("[AudioStream] Continuous capture started");
         Ok(rx)
@@ -84,7 +89,7 @@ impl ContinuousAudioCapture {
 
     /// Stops continuous audio capture
     pub fn stop(&mut self) -> Result<()> {
-        if !self.is_running.load(Ordering::Relaxed) {
+        if !self.is_running.load(Ordering::Acquire) {
             return Ok(());
         }
 
@@ -95,14 +100,14 @@ impl ContinuousAudioCapture {
         }
 
         self.audio_tx = None;
-        self.is_running.store(false, Ordering::Relaxed);
+        self.is_running.store(false, Ordering::Release);
 
         log::info!("[AudioStream] Continuous capture stopped");
         Ok(())
     }
 
     pub fn is_running(&self) -> bool {
-        self.is_running.load(Ordering::Relaxed)
+        self.is_running.load(Ordering::Acquire)
     }
 
     pub fn sample_rate(&self) -> u32 {
@@ -125,7 +130,7 @@ fn build_streaming_input(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
     sample_format: SampleFormat,
-    tx: mpsc::UnboundedSender<Vec<u8>>,
+    tx: mpsc::Sender<Vec<u8>>,
     channels: usize,
     chunk_size: usize,
 ) -> Result<Stream> {
@@ -147,7 +152,7 @@ fn build_streaming_input(
 fn build_stream<T: Sample + SizedSample + Send + 'static>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    tx: mpsc::UnboundedSender<Vec<u8>>,
+    tx: mpsc::Sender<Vec<u8>>,
     err_fn: impl Fn(cpal::StreamError) + Send + 'static,
     channels: usize,
     chunk_size: usize,
@@ -171,10 +176,19 @@ fn build_stream<T: Sample + SizedSample + Send + 'static>(
             while buffer.len() >= chunk_size * 2 { // *2 because i16 = 2 bytes
                 let chunk: Vec<u8> = buffer.drain(..chunk_size * 2).collect();
 
-                // Send chunk (non-blocking)
-                if tx.send(chunk).is_err() {
-                    log::warn!("[AudioStream] Receiver dropped, stopping stream");
-                    return;
+                // Try to send chunk - if buffer is full, drop oldest audio to prevent blocking
+                // Audio callback must not block or it will cause audio glitches
+                match tx.try_send(chunk) {
+                    Ok(()) => {}
+                    Err(mpsc::error::TrySendError::Full(_)) => {
+                        // Buffer full - this means receiver can't keep up
+                        // Drop this chunk to prevent memory buildup and audio glitches
+                        log::warn!("[AudioStream] Buffer full, dropping audio chunk");
+                    }
+                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                        log::warn!("[AudioStream] Receiver dropped, stopping stream");
+                        return;
+                    }
                 }
             }
         },

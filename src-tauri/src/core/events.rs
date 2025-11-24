@@ -61,30 +61,37 @@ struct TextPayload<'a> {
 
 pub fn emit_status(app: &AppHandle, phase: StatusPhase, message: Option<&str>) {
     let text = message.unwrap_or_else(|| phase.default_message());
-    app.emit(
+    if let Err(e) = app.emit(
         EVENT_STATUS,
         StatusPayload {
             phase: phase.key(),
             message: text,
         },
-    )
-    .ok();
+    ) {
+        log::error!("[Events] Failed to emit status event: {}", e);
+    }
 
     if let Some(state) = app.try_state::<AppState>() {
         if let Ok(guard) = state.tray_status_item().lock() {
             if let Some(item) = guard.as_ref() {
-                item.set_text(phase.tray_label()).ok();
+                if let Err(e) = item.set_text(phase.tray_label()) {
+                    log::warn!("[Events] Failed to update tray status: {}", e);
+                }
             }
         }
     }
 }
 
 pub fn emit_partial(app: &AppHandle, text: &str) {
-    app.emit(EVENT_PARTIAL, TextPayload { text }).ok();
+    if let Err(e) = app.emit(EVENT_PARTIAL, TextPayload { text }) {
+        log::error!("[Events] Failed to emit partial event: {}", e);
+    }
 }
 
 pub fn emit_complete(app: &AppHandle, text: &str) {
-    app.emit(EVENT_COMPLETE, TextPayload { text }).ok();
+    if let Err(e) = app.emit(EVENT_COMPLETE, TextPayload { text }) {
+        log::error!("[Events] Failed to emit complete event: {}", e);
+    }
 }
 
 pub fn emit_error(app: &AppHandle, message: &str) {

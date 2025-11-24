@@ -55,12 +55,20 @@ pub fn run() {
 
             if let Some(window) = handle.get_webview_window("main") {
                 if !is_autostart {
-                    window.show().ok();
-                    window.unminimize().ok();
-                    window.set_focus().ok();
+                    if let Err(e) = window.show() {
+                        log::warn!("[Setup] Failed to show main window: {}", e);
+                    }
+                    if let Err(e) = window.unminimize() {
+                        log::warn!("[Setup] Failed to unminimize main window: {}", e);
+                    }
+                    if let Err(e) = window.set_focus() {
+                        log::warn!("[Setup] Failed to set focus on main window: {}", e);
+                    }
                 } else {
                     // Keep window hidden when starting with the system
-                    window.hide().ok();
+                    if let Err(e) = window.hide() {
+                        log::warn!("[Setup] Failed to hide main window: {}", e);
+                    }
                 }
             }
             
@@ -76,14 +84,19 @@ pub fn run() {
                     use windows::Win32::UI::WindowsAndMessaging::{
                         SetWindowPos, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE, SWP_SHOWWINDOW
                     };
-                    
+
                     if let Ok(hwnd) = overlay.hwnd() {
                         let hwnd = HWND(hwnd.0 as _);
+                        // SAFETY: SetWindowPos is called with a valid HWND obtained from Tauri's
+                        // window handle. The hwnd is guaranteed valid as long as the window exists.
+                        // We're only modifying window position flags (topmost, show without activate),
+                        // which is safe and doesn't affect memory or cause undefined behavior.
+                        // The SWP_NOMOVE | SWP_NOSIZE flags ensure position/size aren't changed.
                         unsafe {
                             let _ = SetWindowPos(
-                                hwnd, 
-                                Some(HWND_TOPMOST), 
-                                0, 0, 0, 0, 
+                                hwnd,
+                                Some(HWND_TOPMOST),
+                                0, 0, 0, 0,
                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
                             );
                         }
@@ -97,7 +110,9 @@ pub fn run() {
                 }
             }
 
-            commands::apply_autostart(handle, initial.auto_start).ok();
+            if let Err(e) = commands::apply_autostart(handle, initial.auto_start) {
+                log::warn!("[Setup] Failed to apply autostart setting: {}", e);
+            }
             hotkey::rebind_hotkey(handle, &initial)?;
             emit_status(handle, StatusPhase::Idle, None);
 
@@ -128,7 +143,9 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                window.hide().ok();
+                if let Err(e) = window.hide() {
+                    log::warn!("[Window] Failed to hide window on close request: {}", e);
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![

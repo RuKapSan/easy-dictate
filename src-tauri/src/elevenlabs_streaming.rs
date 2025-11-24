@@ -116,7 +116,7 @@ impl ElevenLabsStreamingClient {
     /// Returns whether any audio has been sent since the last gate open
     pub async fn has_audio_since_open(&self) -> bool {
         if let Some(conn) = self.connection.lock().await.as_ref() {
-            conn.sent_since_open.load(Ordering::Relaxed)
+            conn.sent_since_open.load(Ordering::Acquire)
         } else {
             false
         }
@@ -125,7 +125,7 @@ impl ElevenLabsStreamingClient {
     /// Returns true if commit is in progress
     pub async fn is_committing(&self) -> bool {
         if let Some(conn) = self.connection.lock().await.as_ref() {
-            conn.is_committing.load(Ordering::Relaxed)
+            conn.is_committing.load(Ordering::Acquire)
         } else {
             false
         }
@@ -143,8 +143,9 @@ impl ElevenLabsStreamingClient {
         let mut conn_guard = self.connection.lock().await;
         
         // Check if existing connection is actually alive
+        // Use Acquire ordering to ensure we see the latest state from other threads
         if let Some(conn) = conn_guard.as_ref() {
-            if conn.is_alive.load(Ordering::Relaxed) {
+            if conn.is_alive.load(Ordering::Acquire) {
                 return Err(anyhow!("Connection already exists. Disconnect first."));
             } else {
                 // Cleanup dead connection
@@ -272,18 +273,19 @@ impl ElevenLabsStreamingClient {
             .as_ref()
             .ok_or_else(|| anyhow!("Not connected. Call connect() first."))?;
 
-        if !conn.is_alive.load(Ordering::Relaxed) {
+        // Use Acquire/Release ordering for proper synchronization across threads
+        if !conn.is_alive.load(Ordering::Acquire) {
              return Err(anyhow!("Connection is dead"));
         }
 
-        // Проверяем gate
-        if !conn.is_transmitting.load(Ordering::Relaxed) {
-            // Gate закрыт - игнорируем аудио
+        // Check gate - Acquire ensures we see the latest state
+        if !conn.is_transmitting.load(Ordering::Acquire) {
+            // Gate closed - ignore audio
             return Ok(());
         }
 
-        // Gate открыт - отправляем
-        conn.sent_since_open.store(true, Ordering::Relaxed);
+        // Gate open - send audio. Release ensures other threads see this write
+        conn.sent_since_open.store(true, Ordering::Release);
         let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&pcm_data);
 
         let message = AudioChunkMessage {
@@ -302,24 +304,25 @@ impl ElevenLabsStreamingClient {
         Ok(())
     }
 
-    /// Открыть gate - начать передачу (KeyDown)
+    /// Open gate - start transmitting (KeyDown)
     pub async fn open_gate(&self) -> Result<()> {
         let conn_guard = self.connection.lock().await;
         let conn = conn_guard
             .as_ref()
             .ok_or_else(|| anyhow!("Not connected"))?;
-            
-        if !conn.is_alive.load(Ordering::Relaxed) {
+
+        if !conn.is_alive.load(Ordering::Acquire) {
              return Err(anyhow!("Connection is dead"));
         }
 
-        conn.sent_since_open.store(false, Ordering::Relaxed);
-        conn.is_transmitting.store(true, Ordering::Relaxed);
+        // Use Release ordering to ensure other threads see these writes
+        conn.sent_since_open.store(false, Ordering::Release);
+        conn.is_transmitting.store(true, Ordering::Release);
         log::info!("[ElevenLabs] Gate OPENED - transmitting audio");
         Ok(())
     }
 
-    /// Закрыть gate и отправить commit (KeyUp)
+    /// Close gate and send commit (KeyUp)
     pub async fn close_gate_and_commit(&self) -> Result<()> {
         // 1) Validate & mark committing; send final silence + commit
         {
@@ -328,18 +331,20 @@ impl ElevenLabsStreamingClient {
                 .as_ref()
                 .ok_or_else(|| anyhow!("Not connected"))?;
 
-            if !conn.is_alive.load(Ordering::Relaxed) {
+            if !conn.is_alive.load(Ordering::Acquire) {
                  return Err(anyhow!("Connection is dead"));
             }
 
-            conn.is_transmitting.store(false, Ordering::Relaxed);
-            conn.is_committing.store(true, Ordering::Relaxed);
+            // Use Release to ensure audio thread sees gate closed
+            conn.is_transmitting.store(false, Ordering::Release);
+            conn.is_committing.store(true, Ordering::Release);
             log::info!("[ElevenLabs] Gate CLOSED - sending commit");
 
             // If no audio was sent since gate open, skip commit (no-op)
-            if !conn.sent_since_open.load(Ordering::Relaxed) {
+            // Use Acquire to see all writes from audio thread
+            if !conn.sent_since_open.load(Ordering::Acquire) {
                 log::warn!("[ElevenLabs] No audio since gate opened; skipping commit");
-                conn.is_committing.store(false, Ordering::Relaxed);
+                conn.is_committing.store(false, Ordering::Release);
                 return Ok(());
             }
 
@@ -394,7 +399,8 @@ impl ElevenLabsStreamingClient {
         {
             let mut guard = self.connection.lock().await;
             if let Some(conn) = guard.take() {
-                conn.is_alive.store(false, Ordering::Relaxed);
+                // Use Release to ensure reader thread sees this
+                conn.is_alive.store(false, Ordering::Release);
                 
                 // Stop keepalive immediately
                 conn.keepalive_task.abort();
@@ -430,29 +436,31 @@ impl ElevenLabsStreamingClient {
         Ok(())
     }
 
-    /// Закрыть gate без коммита (если аудио не было)
+    /// Close gate without commit (if no audio was sent)
     pub async fn close_gate(&self) -> Result<()> {
         let conn_guard = self.connection.lock().await;
         let conn = conn_guard
             .as_ref()
             .ok_or_else(|| anyhow!("Not connected"))?;
-        if !conn.is_alive.load(Ordering::Relaxed) {
+        if !conn.is_alive.load(Ordering::Acquire) {
             return Err(anyhow!("Connection is dead"));
         }
-        conn.is_transmitting.store(false, Ordering::Relaxed);
+        // Use Release to ensure audio thread sees gate closed
+        conn.is_transmitting.store(false, Ordering::Release);
         Ok(())
     }
 
 
 
-    /// Отключиться и закрыть WebSocket
+    /// Disconnect and close WebSocket
     pub async fn disconnect(&self) -> Result<()> {
         let mut conn_guard = self.connection.lock().await;
 
         if let Some(conn) = conn_guard.take() {
             log::info!("[ElevenLabs] Disconnecting...");
-            
-            conn.is_alive.store(false, Ordering::Relaxed);
+
+            // Use Release to ensure all threads see connection is dead
+            conn.is_alive.store(false, Ordering::Release);
 
             // Отменяем background tasks
             conn.cancel_token.cancel();
@@ -471,10 +479,11 @@ impl ElevenLabsStreamingClient {
         Ok(())
     }
 
-    /// Проверить подключение
+    /// Check if connected
     pub async fn is_connected(&self) -> bool {
         if let Some(conn) = self.connection.lock().await.as_ref() {
-            conn.is_alive.load(Ordering::Relaxed)
+            // Use Acquire to see latest state from other threads
+            conn.is_alive.load(Ordering::Acquire)
         } else {
             false
         }
@@ -548,7 +557,8 @@ async fn message_reader_task(
             }
         }
     }
-    is_alive.store(false, Ordering::Relaxed);
+    // Use Release to ensure other threads see connection is dead
+    is_alive.store(false, Ordering::Release);
     cancel_token.cancel(); // Stop keepalive task
     log::info!("[ElevenLabs] Reader task finished, connection marked dead");
 }

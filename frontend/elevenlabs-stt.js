@@ -21,6 +21,9 @@ let lastApiKey = "";
 let lastSampleRate = 48000;
 let lastLanguageCode = "auto";
 
+// Store event listener unsubscribe functions for cleanup
+let eventListenerCleanup = [];
+
 /**
  * Connect to ElevenLabs streaming STT via Rust backend
  */
@@ -154,17 +157,35 @@ async function initElevenLabsStreaming(settings) {
 }
 
 /**
+ * Cleanup previously registered event listeners to prevent memory leaks
+ */
+function cleanupEventListeners() {
+  if (eventListenerCleanup.length > 0) {
+    log(`Cleaning up ${eventListenerCleanup.length} event listener(s)`);
+    for (const unsubscribe of eventListenerCleanup) {
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    }
+    eventListenerCleanup = [];
+  }
+}
+
+/**
  * Setup event listeners for ElevenLabs streaming events from Rust backend
  */
-function setupElevenLabsEventListeners() {
+async function setupElevenLabsEventListeners() {
   const listen = window.__TAURI__?.event?.listen;
   if (!listen) {
     log("Tauri listen not available", "error");
     return;
   }
 
+  // Clean up any existing listeners first to prevent accumulation
+  cleanupEventListeners();
+
   // Listen for transcript events (both partial and committed)
-  listen("elevenlabs://transcript", ({ payload }) => {
+  const unsubTranscript = await listen("elevenlabs://transcript", ({ payload }) => {
     if (!payload) return;
 
     const resultEl = document.getElementById("last-result");
@@ -188,9 +209,10 @@ function setupElevenLabsEventListeners() {
       }
     }
   });
+  eventListenerCleanup.push(unsubTranscript);
 
   // Connection closed: for ContextReset (4001) auto-reconnect to keep next press instant
-  listen("elevenlabs://connection-closed", (event) => {
+  const unsubClosed = await listen("elevenlabs://connection-closed", (event) => {
     const payload = event.payload || {};
     const code = payload.code;
     const reason = payload.reason;
@@ -204,15 +226,17 @@ function setupElevenLabsEventListeners() {
       }, 100);
     }
   });
+  eventListenerCleanup.push(unsubClosed);
 
   // Handle errors
-  listen("elevenlabs://error", ({ payload }) => {
+  const unsubError = await listen("elevenlabs://error", ({ payload }) => {
     log(`Error from backend: ${payload.error}`, "error");
     // If error indicates connection loss, we might want to reset isConnected
     if (payload.error.includes("Connection is dead") || payload.error.includes("closed")) {
       isConnected = false;
     }
   });
+  eventListenerCleanup.push(unsubError);
 
   log("Event listeners registered");
 }
@@ -224,6 +248,7 @@ window.ElevenLabsSTT = {
   disconnect: disconnectElevenLabsStreaming,
   isConnected: isStreamingConnected,
   setupEventListeners: setupElevenLabsEventListeners,
+  cleanupEventListeners: cleanupEventListeners,
 };
 
 log("Module loaded");
