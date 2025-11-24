@@ -5,6 +5,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Easy Dictate</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 
@@ -17,9 +20,13 @@
 
     <section class="card" id="statusCard">
       <h2>Статус</h2>
-      <div class="status-line">
-        <span id="status-indicator" class="pill idle">Ожидает</span>
-        <span id="status-text">Готово к записи по горячей клавише.</span>
+      <div class="status-hero">
+        <div id="status-orb" class="status-orb idle"></div>
+        <div class="status-info">
+          <div class="status-label">Состояние</div>
+          <div id="status-text" class="status-text">Готово к записи</div>
+        </div>
+        <span id="status-indicator" class="pill idle" hidden>Ожидает</span>
       </div>
       <progress id="progress" max="1" value="0" hidden></progress>
       <pre id="last-result" class="result" hidden></pre>
@@ -37,7 +44,7 @@
           </select>
         </label>
         <label id="openai-api-key-label">
-          API ключ OpenAI <span id="openai-api-hint" style="font-size: 0.85em; color: #666;"></span>
+          API ключ OpenAI <span id="openai-api-hint" style="font-size: 0.85em; color: var(--text-muted);"></span>
           <input type="password" id="apiKey" autocomplete="off" placeholder="sk-..." />
         </label>
         <label id="groq-api-key-label" hidden>
@@ -61,71 +68,68 @@
         <label class="hotkey-label">
           Горячая клавиша
           <div class="hotkey-row">
-            <button type="button" id="startHotkeyCapture">Записать сочетание</button>
-            <span id="hotkeyDisplay" data-placeholder="Комбинация не задана" data-empty="true">Комбинация не
-              задана</span>
+            <button type="button" id="startHotkeyCapture">Записать</button>
+            <span id="hotkeyDisplay" data-placeholder="Не задана" data-empty="true">Не задана</span>
             <input type="hidden" id="hotkey" />
           </div>
-          <small class="hotkey-hint">Нажмите «Записать сочетание», затем удерживайте нужные клавиши или кнопку
-            мыши.</small>
+          <small class="hotkey-hint">Нажмите «Записать», затем удерживайте нужные клавиши</small>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="simulateTyping" />
-          <span>Набирать текст по символам через эмуляцию клавиатуры</span>
+          <span>Эмулировать ввод с клавиатуры</span>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="copyToClipboard" />
-          <span>Дублировать результат в буфер обмена</span>
+          <span>Копировать в буфер обмена</span>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="autoStart" />
-          <span>Запускать вместе с системой</span>
+          <span>Автозапуск с системой</span>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="useStreaming" checked />
-          <span>Показывать текст по мере распознавания (если поддерживается)</span>
+          <span>Показывать текст в реальном времени</span>
         </label>
         <label class="switch-row translate-row">
           <input type="checkbox" id="autoTranslate" />
           <span class="switch-text">
             <span class="switch-title">Переводить результат</span>
-            <span class="switch-hint">Автоматически переводить текст на выбранный язык</span>
+            <span class="switch-hint">Автоперевод на выбранный язык</span>
           </span>
           <select id="targetLanguage" class="inline-select">
             <option value="русский">На русский</option>
             <option value="английский">На английский</option>
           </select>
         </label>
-        <label id="llm-provider-label" hidden style="margin-left: 2rem;">
+        <label id="llm-provider-label" hidden style="margin-left: 52px;">
           LLM для обработки
-          <select id="llmProvider" style="margin-left: 0.5rem;">
+          <select id="llmProvider">
             <option value="openai">OpenAI GPT-4o-mini</option>
             <option value="groq" selected>Groq OSS-20B</option>
           </select>
         </label>
-        <label class="switch-row custom-instructions-toggle">
+        <label class="switch-row">
           <input type="checkbox" id="useCustomInstructions" />
           <span class="switch-text">
-            <span class="switch-title">Применять свои инструкции</span>
-            <span class="switch-hint">Например: «Сделай краткое резюме в Markdown»</span>
+            <span class="switch-title">Свои инструкции</span>
+            <span class="switch-hint">Например: «Сделай краткое резюме»</span>
           </span>
         </label>
         <label class="custom-instructions-field" id="customInstructionsWrapper" hidden>
-          Свои инструкции
+          Инструкции
           <textarea id="customInstructions" rows="3"
-            placeholder="Опишите, как доработать распознанный текст"></textarea>
-          <small class="field-hint">Инструкции выполняются после распознавания и перевода (если включён). Оставьте поле
-            пустым, чтобы использовать исходный результат.</small>
+            placeholder="Опишите, как обработать текст"></textarea>
+          <small class="field-hint">Выполняются после распознавания и перевода</small>
         </label>
         <div class="actions">
-          <button type="submit" id="saveBtn">Сохранить</button>
           <button type="button" id="revertBtn">Отменить</button>
+          <button type="submit" id="saveBtn">Сохранить</button>
         </div>
       </form>
     </section>
 
     <footer>
-      <p>Версия <span id="app-version">-</span></p>
+      <p>v<span id="app-version">-</span></p>
     </footer>
   </main>
 

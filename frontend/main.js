@@ -29,6 +29,8 @@ function hydrateTauriApis() {
 hydrateTauriApis();
 
 const statusIndicator = document.getElementById("status-indicator");
+const statusOrb = document.getElementById("status-orb");
+const statusCard = document.getElementById("statusCard");
 const statusText = document.getElementById("status-text");
 const progressEl = document.getElementById("progress");
 const resultEl = document.getElementById("last-result");
@@ -156,18 +158,28 @@ async function persistSettings(payload, successMessage = "Сохранено") {
 }
 
 function setStatus(state, text) {
-  if (!statusIndicator) return;
-  statusIndicator.className = `pill ${state}`;
-  statusIndicator.textContent =
-    state === "recording"
-      ? "Запись"
-      : state === "transcribing"
-        ? "Отправка"
-        : state === "success"
-          ? "Готово"
-          : state === "error"
-            ? "Ошибка"
-            : "Ожидает";
+  // Update orb state
+  if (statusOrb) {
+    statusOrb.className = `status-orb ${state}`;
+  }
+  // Update card active state for scan animation
+  if (statusCard) {
+    statusCard.classList.toggle("active", state === "recording" || state === "transcribing");
+  }
+  // Update pill indicator (hidden but kept for compatibility)
+  if (statusIndicator) {
+    statusIndicator.className = `pill ${state}`;
+    statusIndicator.textContent =
+      state === "recording"
+        ? "Запись"
+        : state === "transcribing"
+          ? "Отправка"
+          : state === "success"
+            ? "Готово"
+            : state === "error"
+              ? "Ошибка"
+              : "Ожидает";
+  }
   if (statusText) statusText.textContent = text;
 }
 
@@ -193,10 +205,10 @@ function renderHotkey(value) {
 function applyHotkeyRecordingStyles(active, previewText) {
   if (hotkeyRecordBtn) {
     hotkeyRecordBtn.classList.toggle("recording", active);
-    hotkeyRecordBtn.textContent = active ? "Слушаю..." : "Записать сочетание";
+    hotkeyRecordBtn.textContent = active ? "Слушаю..." : "Записать";
   }
   if (active && hotkeyDisplay) {
-    hotkeyDisplay.textContent = previewText ?? "Удерживайте нужную комбинацию";
+    hotkeyDisplay.textContent = previewText ?? "Удерживайте клавиши";
     hotkeyDisplay.dataset.empty = "false";
   }
 }
@@ -265,7 +277,7 @@ function updateHotkeyPreview() {
   const modifiers = normalizeModifiers(Array.from(pressedModifiers));
   const preview = modifiers.length
     ? `${modifiers.join("+")} + …`
-    : "Удерживайте нужную комбинацию";
+    : "Удерживайте клавиши";
   applyHotkeyRecordingStyles(true, preview);
 }
 
@@ -656,7 +668,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         progressEl.value = 0;
       } else if (phase === "idle") {
         progressEl.hidden = true;
-        setStatus("idle", message ?? "Готово к записи по горячей клавише");
+        setStatus("idle", message ?? "Готово к записи");
       } else if (phase === "error") {
         progressEl.hidden = true;
         setStatus("error", message ?? "Ошибка");
