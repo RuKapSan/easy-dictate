@@ -1,55 +1,48 @@
 :root {
-    --accent: #4a90e2;
-    --bg-glass: rgba(16, 20, 24, 0.75);
-    --text: #ffffff;
-    --text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    --accent: #6366f1;
+    --success: #22c55e;
+    --error: #ef4444;
+    --bg: rgba(15, 15, 20, 0.92);
+    --border: rgba(255, 255, 255, 0.1);
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body {
     margin: 0;
     padding: 0;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
     background: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: "Inter", "Segoe UI", sans-serif;
+    font-family: "Inter", "Segoe UI", -apple-system, sans-serif;
 }
 
 #overlay-container {
-    position: fixed;
-    bottom: 15vh;
-    left: 50%;
-    transform: translate(-50%, 50%);
+    width: 100%;
+    height: 100%;
     display: flex;
-    align-items: center;
-    gap: 20px;
+    align-items: flex-start;
+    gap: 16px;
     padding: 16px 24px;
-    background: rgba(20, 20, 20, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    max-width: 80%;
-    min-width: 300px;
-    max-height: 80vh;
+    transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 #overlay-container.hidden {
     opacity: 0;
-    transform: translate(-50%, calc(50% + 20px)) scale(0.95);
+    transform: translateY(10px) scale(0.96);
     pointer-events: none;
 }
 
+/* Waveform indicator */
 .status-indicator {
-    position: relative;
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -59,94 +52,62 @@ body {
 .waveform {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     height: 24px;
 }
 
 .bar {
     width: 4px;
-    height: 100%;
     background: var(--accent);
     border-radius: 2px;
     animation: wave 1s ease-in-out infinite;
 }
 
-.bar:nth-child(1) {
-    animation-delay: 0.0s;
-    height: 40%;
-}
-
-.bar:nth-child(2) {
-    animation-delay: 0.1s;
-    height: 70%;
-}
-
-.bar:nth-child(3) {
-    animation-delay: 0.2s;
-    height: 100%;
-}
-
-.bar:nth-child(4) {
-    animation-delay: 0.1s;
-    height: 70%;
-}
-
-.bar:nth-child(5) {
-    animation-delay: 0.0s;
-    height: 40%;
-}
+.bar:nth-child(1) { animation-delay: 0.0s; height: 40%; }
+.bar:nth-child(2) { animation-delay: 0.1s; height: 70%; }
+.bar:nth-child(3) { animation-delay: 0.2s; height: 100%; }
+.bar:nth-child(4) { animation-delay: 0.1s; height: 70%; }
+.bar:nth-child(5) { animation-delay: 0.0s; height: 40%; }
 
 @keyframes wave {
-
-    0%,
-    100% {
-        transform: scaleY(0.5);
-    }
-
-    50% {
-        transform: scaleY(1.2);
-    }
+    0%, 100% { transform: scaleY(0.5); }
+    50% { transform: scaleY(1.2); }
 }
 
+/* Text */
 .text-content {
     color: #ffffff;
-    font-size: 1.5rem;
+    font-size: 1.1rem;
     font-weight: 500;
     line-height: 1.4;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
     white-space: pre-wrap;
-    overflow: visible;
-    text-overflow: clip;
-    min-width: 100px;
-    text-align: center;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    flex: 1;
+    text-align: left;
+    overflow-y: auto;
+    max-height: 100%;
 }
 
-/* Animation for text updates */
 .text-content.updating {
-    animation: text-flash 0.2s ease;
+    animation: flash 0.15s ease;
 }
 
-@keyframes text-flash {
-    0% {
-        opacity: 0.7;
-    }
-
-    100% {
-        opacity: 1;
-    }
+@keyframes flash {
+    0% { opacity: 0.6; }
+    100% { opacity: 1; }
 }
 
-/* Success state */
+/* States */
 #overlay-container.success .bar {
-    background: #4cd964;
+    background: var(--success);
     animation: none;
     transform: scaleY(1);
     height: 60%;
 }
 
-/* Error state */
 #overlay-container.error .bar {
-    background: #ff5f5f;
+    background: var(--error);
     animation: none;
     transform: scaleY(1);
     height: 60%;

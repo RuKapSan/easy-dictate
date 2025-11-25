@@ -30,9 +30,11 @@
         "decorations": false,
         "skipTaskbar": true,
         "visible": false,
-        "fullscreen": true,
+        "fullscreen": false,
         "resizable": false,
-        "shadow": false
+        "shadow": false,
+        "width": 600,
+        "height": 150
       }
     ],
     "security": {

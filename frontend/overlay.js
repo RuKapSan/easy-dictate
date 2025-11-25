@@ -1,4 +1,5 @@
 const { listen } = window.__TAURI__.event;
+const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow } = window.__TAURI__.window;
 
 const container = document.getElementById('overlay-container');
@@ -6,12 +7,23 @@ const textEl = document.getElementById('transcription-text');
 const appWindow = getCurrentWindow();
 
 function log(msg) {
-    console.log(`[Overlay] ${msg}`);
-    window.__TAURI__.core.invoke('frontend_log', { level: 'info', message: `[Overlay] ${msg}` }).catch(() => { });
+    console.log('[Overlay] ' + msg);
+    invoke('frontend_log', { level: 'info', message: '[Overlay] ' + msg }).catch(() => { });
 }
 
 let hideTimeout = null;
 let animationTimeout = null;
+let showRealtimeText = true;
+
+async function loadSettings() {
+    try {
+        const settings = await invoke('get_settings');
+        showRealtimeText = settings.use_streaming !== false;
+        log('Settings loaded: showRealtimeText=' + showRealtimeText);
+    } catch (e) {
+        log('Failed to load settings: ' + e);
+    }
+}
 
 async function showOverlay() {
     if (hideTimeout) {
@@ -22,8 +34,9 @@ async function showOverlay() {
         clearTimeout(animationTimeout);
         animationTimeout = null;
     }
+    await invoke('show_overlay_no_focus').catch(e => log('show_overlay_no_focus error: ' + e));
     container.classList.remove('hidden');
-    log("Showing overlay (CSS)");
+    log('Showing overlay');
 }
 
 function hideOverlay(delay = 2000) {
@@ -32,14 +45,17 @@ function hideOverlay(delay = 2000) {
 
     hideTimeout = setTimeout(async () => {
         container.classList.add('hidden');
-        log("Hiding overlay (CSS)");
+        setTimeout(() => {
+            appWindow.hide().catch(() => {});
+        }, 300);
+        log('Hiding overlay');
     }, delay);
 }
 
 function updateText(text) {
     textEl.textContent = text;
     textEl.classList.remove('updating');
-    void textEl.offsetWidth; // Trigger reflow
+    void textEl.offsetWidth;
     textEl.classList.add('updating');
 }
 
@@ -50,47 +66,49 @@ function setStatus(status) {
 }
 
 async function init() {
-    log("Overlay initialized");
-    // Window management is now handled in Rust setup (always visible, click-through, no focus)
-    // We only toggle CSS classes here.
+    log('Overlay initialized');
+    
+    await loadSettings();
 
-    // Listen for status changes
+    await listen('settings://changed', async () => {
+        log('Settings changed, reloading...');
+        await loadSettings();
+    });
+
     await listen('transcription://status', (event) => {
-        log(`Status event: ${JSON.stringify(event.payload)}`);
+        log('Status event: ' + JSON.stringify(event.payload));
         const { phase } = event.payload;
 
         if (phase === 'recording') {
             setStatus('recording');
-            updateText(''); // Clear text, rely on waveform
+            updateText('');
             showOverlay();
         } else if (phase === 'transcribing') {
             setStatus('transcribing');
-            // Keep showing overlay
         } else if (phase === 'success') {
             setStatus('success');
-            hideOverlay(500); // Hide quickly after success
+            hideOverlay(500);
         } else if (phase === 'error') {
             setStatus('error');
             updateText('Ошибка');
             hideOverlay(3000);
         } else if (phase === 'idle') {
-            // Only hide if we are NOT in success state (let success timeout handle it)
             if (!container.classList.contains('success')) {
                 hideOverlay(0);
             }
         }
     });
 
-    // Listen for partial results
     await listen('transcription://partial', (event) => {
-        // log(`Partial: ${event.payload?.text}`); // Commented out to avoid spam
+        if (!showRealtimeText) {
+            return;
+        }
         if (event.payload?.text) {
             updateText(event.payload.text);
             showOverlay();
         }
     });
 
-    // Listen for complete results
     await listen('transcription://complete', (event) => {
         if (event.payload?.text) {
             updateText(event.payload.text);

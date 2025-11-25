@@ -32,6 +32,8 @@
     "allow-elevenlabs-streaming-open-gate",
     "allow-elevenlabs-streaming-close-gate",
     "allow-elevenlabs-streaming-send-chunk",
-    "allow-elevenlabs-streaming-is-connected"
+    "allow-elevenlabs-streaming-is-connected",
+    "allow-show-overlay-no-focus",
+    "core:window:allow-hide"
   ]
 }

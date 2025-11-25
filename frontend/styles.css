@@ -93,8 +93,6 @@ header .subtitle {
 /* Cards */
 .card {
   background: var(--bg-card);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   padding: 20px;
@@ -575,7 +573,6 @@ button#revertBtn:hover {
   right: 20px;
   padding: 12px 16px;
   background: var(--bg-secondary);
-  backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text);

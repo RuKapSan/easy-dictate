@@ -72,42 +72,11 @@ pub fn run() {
                 }
             }
             
-            // Initialize overlay window: visible but transparent, click-through, no focus
+            // Initialize overlay window: keep hidden, set click-through
+            // Overlay will be shown and positioned on the correct monitor when recording starts
             if let Some(overlay) = handle.get_webview_window("overlay") {
-                // 1. Enable click-through
                 let _ = overlay.set_ignore_cursor_events(true);
-
-                // 2. Show without focus (Windows)
-                #[cfg(target_os = "windows")]
-                {
-                    use windows::Win32::Foundation::HWND;
-                    use windows::Win32::UI::WindowsAndMessaging::{
-                        SetWindowPos, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE, SWP_SHOWWINDOW
-                    };
-
-                    if let Ok(hwnd) = overlay.hwnd() {
-                        let hwnd = HWND(hwnd.0 as _);
-                        // SAFETY: SetWindowPos is called with a valid HWND obtained from Tauri's
-                        // window handle. The hwnd is guaranteed valid as long as the window exists.
-                        // We're only modifying window position flags (topmost, show without activate),
-                        // which is safe and doesn't affect memory or cause undefined behavior.
-                        // The SWP_NOMOVE | SWP_NOSIZE flags ensure position/size aren't changed.
-                        unsafe {
-                            let _ = SetWindowPos(
-                                hwnd,
-                                Some(HWND_TOPMOST),
-                                0, 0, 0, 0,
-                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
-                            );
-                        }
-                    }
-                }
-                
-                // Non-windows fallback
-                #[cfg(not(target_os = "windows"))]
-                {
-                    let _ = overlay.show();
-                }
+                log::info!("[Setup] Overlay window initialized (hidden until recording)");
             }
 
             if let Err(e) = commands::apply_autostart(handle, initial.auto_start) {

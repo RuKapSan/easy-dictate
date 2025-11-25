@@ -350,36 +350,61 @@ pub async fn elevenlabs_streaming_is_connected(
 #[tauri::command]
 pub async fn show_overlay_no_focus(app: AppHandle) -> Result<(), String> {
     use tauri::Manager;
-    
-    if let Some(window) = app.get_webview_window("overlay") {
-        // Ensure click-through is enabled before showing
-        // window.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
 
+    if let Some(window) = app.get_webview_window("overlay") {
         #[cfg(target_os = "windows")]
         {
-            use windows::Win32::Foundation::HWND;
+            use windows::Win32::Foundation::{HWND, POINT, RECT};
+            use windows::Win32::Graphics::Gdi::{MonitorFromPoint, GetMonitorInfoW, MONITORINFO, MONITOR_DEFAULTTONEAREST};
             use windows::Win32::UI::WindowsAndMessaging::{
-                SetWindowPos, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE, SWP_SHOWWINDOW
+                SetWindowPos, GetCursorPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW
             };
+
+            const OVERLAY_WIDTH: i32 = 600;
+            const OVERLAY_HEIGHT: i32 = 150;
+            const BOTTOM_MARGIN: i32 = 60;
 
             if let Ok(hwnd) = window.hwnd() {
                 let hwnd = HWND(hwnd.0 as _);
-                log::info!("[Commands] Showing overlay without focus (HWND: {:?})", hwnd);
-                // SAFETY: SetWindowPos is called with a valid HWND obtained from Tauri's
-                // window handle. The hwnd is guaranteed valid as long as the window exists,
-                // which is ensured by the `get_webview_window` call above returning Some.
-                // We're only modifying window position flags (topmost, show without activate),
-                // which is safe and doesn't affect memory or cause undefined behavior.
-                // The SWP_NOMOVE | SWP_NOSIZE flags ensure position/size aren't changed.
+
+                // Get cursor position and find monitor
+                let mut cursor_pos = POINT::default();
+                let (x, y) = unsafe {
+                    let _ = GetCursorPos(&mut cursor_pos);
+                    let monitor = MonitorFromPoint(cursor_pos, MONITOR_DEFAULTTONEAREST);
+
+                    let mut monitor_info = MONITORINFO {
+                        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                        ..Default::default()
+                    };
+
+                    if GetMonitorInfoW(monitor, &mut monitor_info).as_bool() {
+                        let work_area: RECT = monitor_info.rcWork;
+                        let monitor_width = work_area.right - work_area.left;
+
+                        // Center horizontally, position at bottom with margin
+                        let x = work_area.left + (monitor_width - OVERLAY_WIDTH) / 2;
+                        let y = work_area.bottom - OVERLAY_HEIGHT - BOTTOM_MARGIN;
+                        (x, y)
+                    } else {
+                        // Fallback to primary monitor center-bottom
+                        (100, 800)
+                    }
+                };
+
+                log::info!("[Commands] Positioning overlay at ({}, {}) on monitor with cursor", x, y);
+
+                // SAFETY: SetWindowPos with valid HWND. We're setting position and showing window.
                 unsafe {
                     let _ = SetWindowPos(
                         hwnd,
                         Some(HWND_TOPMOST),
-                        0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+                        x, y,
+                        OVERLAY_WIDTH, OVERLAY_HEIGHT,
+                        SWP_NOACTIVATE | SWP_SHOWWINDOW
                     );
                 }
-                // Enable click-through AFTER showing to ensure it renders correctly
+
                 window.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
             } else {
                 log::warn!("[Commands] Failed to get HWND for overlay, falling back to standard show");

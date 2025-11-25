@@ -1,5 +1,6 @@
 let invoke = null;
 let listen = null;
+let emit = null;
 let tauriApp = null;
 
 function dbg(msg, level = "info") {
@@ -22,6 +23,7 @@ function hydrateTauriApis() {
   }
   invoke = tauri.core?.invoke ?? null;
   listen = tauri.event?.listen ?? null;
+  emit = tauri.event?.emit ?? null;
   tauriApp = tauri.app ?? null;
   dbg(`TAURI wired: invoke=${!!invoke}, listen=${!!listen}, app=${!!tauriApp}`);
 }
@@ -146,6 +148,7 @@ async function persistSettings(payload, successMessage = "Сохранено") {
     console.log("[PERSIST] invoke('save_settings') succeeded!");
     dbg("invoke(save_settings) ok");
     initialSettings = { ...payload };
+    if (emit) emit('settings://changed', {});
     if (successMessage) showToast(successMessage);
     return true;
   } catch (error) {

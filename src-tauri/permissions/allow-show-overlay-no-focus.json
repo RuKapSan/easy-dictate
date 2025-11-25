@@ -1,0 +1,9 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-show-overlay-no-focus",
+      "description": "Allow showing overlay window without focus",
+      "commands": { "allow": ["show_overlay_no_focus"], "deny": [] }
+    }
+  ]
+}
