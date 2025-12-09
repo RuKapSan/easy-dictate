@@ -1,0 +1,23 @@
+[
+  {
+    "timestamp": "2025-12-09T20:51:43.875Z",
+    "level": "info",
+    "message": "Test starting"
+  },
+  {
+    "timestamp": "2025-12-09T20:51:44.579Z",
+    "level": "info",
+    "message": "Initial status class",
+    "data": {
+      "className": "status-orb idle"
+    }
+  },
+  {
+    "timestamp": "2025-12-09T20:51:44.649Z",
+    "level": "info",
+    "message": "Initial status text",
+    "data": {
+      "text": "Готово к записи"
+    }
+  }
+]

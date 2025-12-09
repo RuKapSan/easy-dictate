@@ -1,0 +1,19 @@
+[
+  {
+    "timestamp": "2025-12-09T20:51:45.864Z",
+    "level": "info",
+    "message": "Test starting"
+  },
+  {
+    "timestamp": "2025-12-09T20:51:46.466Z",
+    "level": "info",
+    "message": "Test state",
+    "data": {
+      "has_api_key": false,
+      "hotkey": "Ctrl+Shift+Space",
+      "is_recording": false,
+      "is_transcribing": false,
+      "provider": "OpenAI"
+    }
+  }
+]

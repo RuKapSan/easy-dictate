@@ -1,0 +1,23 @@
+[
+  {
+    "timestamp": "2025-12-09T20:51:53.700Z",
+    "level": "info",
+    "message": "Test starting"
+  },
+  {
+    "timestamp": "2025-12-09T20:51:54.399Z",
+    "level": "info",
+    "message": "Captured hotkey",
+    "data": {
+      "captured": "Ctrl+Shift+A"
+    }
+  },
+  {
+    "timestamp": "2025-12-09T20:51:54.727Z",
+    "level": "error",
+    "message": "Issue detected: toast_error",
+    "data": {
+      "text": "Ошибка при сохранении"
+    }
+  }
+]

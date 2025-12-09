@@ -1,0 +1,15 @@
+[
+  {
+    "timestamp": "2025-12-09T20:51:48.853Z",
+    "level": "info",
+    "message": "Test starting"
+  },
+  {
+    "timestamp": "2025-12-09T20:51:49.474Z",
+    "level": "info",
+    "message": "Auto-translate initial state",
+    "data": {
+      "initiallyChecked": false
+    }
+  }
+]

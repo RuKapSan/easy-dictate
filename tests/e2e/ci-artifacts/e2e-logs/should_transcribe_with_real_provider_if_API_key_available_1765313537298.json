@@ -1,0 +1,12 @@
+[
+  {
+    "timestamp": "2025-12-09T20:52:17.298Z",
+    "level": "info",
+    "message": "Test starting"
+  },
+  {
+    "timestamp": "2025-12-09T20:52:17.880Z",
+    "level": "warn",
+    "message": "No API key configured, skipping real transcription test"
+  }
+]

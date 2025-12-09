@@ -1,0 +1,29 @@
+[
+  {
+    "timestamp": "2025-12-09T20:51:49.996Z",
+    "level": "info",
+    "message": "Test starting"
+  },
+  {
+    "timestamp": "2025-12-09T20:51:50.583Z",
+    "level": "info",
+    "message": "Current settings",
+    "data": {
+      "api_key": "",
+      "auto_start": false,
+      "auto_translate": false,
+      "copy_to_clipboard": true,
+      "custom_instructions": "",
+      "elevenlabs_api_key": "",
+      "groq_api_key": "",
+      "hotkey": "Ctrl+Shift+Space",
+      "llm_provider": "openai",
+      "model": "gpt-4o-transcribe",
+      "provider": "openai",
+      "simulate_typing": true,
+      "target_language": "English",
+      "use_custom_instructions": false,
+      "use_streaming": true
+    }
+  }
+]

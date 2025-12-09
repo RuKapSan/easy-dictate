@@ -1,0 +1,21 @@
+[
+  {
+    "timestamp": "2025-12-09T20:51:44.909Z",
+    "level": "info",
+    "message": "Test starting"
+  },
+  {
+    "timestamp": "2025-12-09T20:51:45.493Z",
+    "level": "info",
+    "message": "Tauri API is available"
+  },
+  {
+    "timestamp": "2025-12-09T20:51:45.502Z",
+    "level": "info",
+    "message": "Ping response",
+    "data": {
+      "result": "pong",
+      "success": true
+    }
+  }
+]

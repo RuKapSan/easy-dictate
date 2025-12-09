@@ -1,0 +1,21 @@
+[
+  {
+    "timestamp": "2025-12-09T20:52:21.857Z",
+    "level": "info",
+    "message": "Test starting"
+  },
+  {
+    "timestamp": "2025-12-09T20:52:22.457Z",
+    "level": "info",
+    "message": "Full UI state",
+    "data": {
+      "consoleErrors": 0,
+      "hotkey": "Ctrl+Shift+A",
+      "lastResult": "Mock transcription result for E2E testing",
+      "provider": "openai",
+      "statusOrb": "status-orb idle",
+      "statusText": "Settings saved. Ready for the next transcription.",
+      "visible": "visible"
+    }
+  }
+]

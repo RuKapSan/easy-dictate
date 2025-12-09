@@ -1,0 +1,25 @@
+[
+  {
+    "timestamp": "2025-12-09T20:52:15.594Z",
+    "level": "info",
+    "message": "Test starting"
+  },
+  {
+    "timestamp": "2025-12-09T20:52:16.190Z",
+    "level": "info",
+    "message": "Switched to mock provider for testing"
+  },
+  {
+    "timestamp": "2025-12-09T20:52:16.872Z",
+    "level": "info",
+    "message": "Mock transcription result",
+    "data": {
+      "result": "Mock transcription result for E2E testing"
+    }
+  },
+  {
+    "timestamp": "2025-12-09T20:52:16.980Z",
+    "level": "info",
+    "message": "Restored original settings"
+  }
+]

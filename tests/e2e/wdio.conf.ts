@@ -24,8 +24,9 @@ let tauriDriver: ChildProcess | null = null;
 const screenshotsDir = path.join(__dirname, 'screenshots');
 const logsDir = path.join(__dirname, 'logs');
 const audioMocksDir = path.join(__dirname, 'audio-mocks');
+const videosDir = path.join(__dirname, 'videos');
 
-[screenshotsDir, logsDir, audioMocksDir].forEach(dir => {
+[screenshotsDir, logsDir, audioMocksDir, videosDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -87,7 +88,14 @@ export const config: Options.Testrunner = {
     ['json', {
       outputDir: logsDir,
       outputFileFormat: (opts: any) => `results-${opts.cid}.${opts.capabilities}.json`
-    }]
+    }],
+    ['video', {
+      saveAllVideos: true,
+      videoSlowdownMultiplier: 1,
+      videoRenderTimeout: 5,
+      outputDir: videosDir,
+      maxTestNameCharacters: 100
+    } as any]
   ],
 
   // Log level
