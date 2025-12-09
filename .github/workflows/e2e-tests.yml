@@ -21,6 +21,9 @@ jobs:
           - os: macos-latest
             target: x86_64-apple-darwin
             run-e2e: false
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            run-e2e: false
 
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 45
@@ -100,7 +103,7 @@ jobs:
         if: matrix.platform.run-e2e && always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-screenshots-${{ matrix.platform.os }}
+          name: e2e-screenshots-${{ matrix.platform.target }}
           path: tests/e2e/screenshots/
           retention-days: 7
 
@@ -108,7 +111,7 @@ jobs:
         if: matrix.platform.run-e2e && always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-videos-${{ matrix.platform.os }}
+          name: e2e-videos-${{ matrix.platform.target }}
           path: tests/e2e/videos/
           retention-days: 7
 
@@ -116,7 +119,7 @@ jobs:
         if: matrix.platform.run-e2e && always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-logs-${{ matrix.platform.os }}
+          name: e2e-logs-${{ matrix.platform.target }}
           path: tests/e2e/artifacts/logs/
           retention-days: 7
 
@@ -124,7 +127,7 @@ jobs:
         if: matrix.platform.run-e2e && always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports-${{ matrix.platform.os }}
+          name: test-reports-${{ matrix.platform.target }}
           path: tests/e2e/logs/
           retention-days: 7
 
@@ -132,7 +135,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.platform.os }}
+          name: build-${{ matrix.platform.target }}
           path: |
             src-tauri/target/release/bundle/
             src-tauri/target/release/*.exe
