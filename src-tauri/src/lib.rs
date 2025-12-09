@@ -118,7 +118,9 @@ pub fn run() {
                     Ok(updater) => match updater.check().await {
                         Ok(Some(update)) => {
                             log::info!("[Updater] Update available: {} -> {}", update.current_version, update.version);
-                            log::info!("[Updater] Update date: {}", update.date);
+                            if let Some(date) = &update.date {
+                                log::info!("[Updater] Update date: {}", date);
+                            }
 
                             // Auto-download and install the update
                             match update.download_and_install(|chunk, total| {
