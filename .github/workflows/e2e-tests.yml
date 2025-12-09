@@ -1,4 +1,4 @@
-name: E2E Tests
+name: Build & E2E Tests
 
 on:
   push:
@@ -7,9 +7,23 @@ on:
     branches: [ master ]
 
 jobs:
-  e2e-windows:
-    runs-on: windows-latest
-    timeout-minutes: 30
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            run-e2e: true
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            run-e2e: false
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            run-e2e: false
+
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -23,7 +37,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.platform.target }}
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -39,6 +53,7 @@ jobs:
             ${{ runner.os }}-cargo-bins-
 
       - name: Cache E2E node_modules
+        if: matrix.platform.run-e2e
         uses: actions/cache@v4
         with:
           path: tests/e2e/node_modules
@@ -47,10 +62,12 @@ jobs:
             ${{ runner.os }}-e2e-node-
 
       - name: Install E2E test dependencies
+        if: matrix.platform.run-e2e
         working-directory: tests/e2e
         run: npm ci
 
       - name: Install Tauri CLI
+        shell: bash
         run: |
           if ! command -v cargo-tauri &> /dev/null; then
             cargo install tauri-cli --locked
@@ -59,6 +76,8 @@ jobs:
           fi
 
       - name: Install tauri-driver
+        if: matrix.platform.run-e2e
+        shell: bash
         run: |
           if ! command -v tauri-driver &> /dev/null; then
             cargo install tauri-driver --locked
@@ -71,39 +90,53 @@ jobs:
         run: cargo tauri build
 
       - name: Run E2E tests
+        if: matrix.platform.run-e2e
         working-directory: tests/e2e
         run: npm test
         env:
           CI: true
 
       - name: Upload E2E screenshots
-        if: always()
+        if: matrix.platform.run-e2e && always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-screenshots
+          name: e2e-screenshots-${{ matrix.platform.os }}
           path: tests/e2e/screenshots/
           retention-days: 7
 
       - name: Upload E2E videos
-        if: always()
+        if: matrix.platform.run-e2e && always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-videos
+          name: e2e-videos-${{ matrix.platform.os }}
           path: tests/e2e/videos/
           retention-days: 7
 
       - name: Upload E2E logs
-        if: always()
+        if: matrix.platform.run-e2e && always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-logs
+          name: e2e-logs-${{ matrix.platform.os }}
           path: tests/e2e/artifacts/logs/
           retention-days: 7
 
       - name: Upload test reports
+        if: matrix.platform.run-e2e && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.platform.os }}
+          path: tests/e2e/logs/
+          retention-days: 7
+
+      - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports
-          path: tests/e2e/logs/
+          name: build-${{ matrix.platform.os }}
+          path: |
+            src-tauri/target/release/bundle/
+            src-tauri/target/release/*.exe
+            src-tauri/target/release/*.app
+            src-tauri/target/release/*.AppImage
+            src-tauri/target/release/*.deb
           retention-days: 7
