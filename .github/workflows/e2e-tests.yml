@@ -38,7 +38,8 @@ jobs:
         run: cargo install tauri-driver --locked
 
       - name: Build Tauri app (release)
-        run: npm run tauri build
+        working-directory: src-tauri
+        run: cargo tauri build
 
       - name: Run E2E tests
         working-directory: tests/e2e
