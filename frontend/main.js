@@ -53,6 +53,7 @@ const hotkeyRecordBtn = document.getElementById("startHotkeyCapture");
 const simulateTypingInput = document.getElementById("simulateTyping");
 const copyToClipboardInput = document.getElementById("copyToClipboard");
 const autoStartInput = document.getElementById("autoStart");
+const autoUpdateInput = document.getElementById("autoUpdate");
 const useStreamingInput = document.getElementById("useStreaming");
 const autoTranslateInput = document.getElementById("autoTranslate");
 const targetLanguageSelect = document.getElementById("targetLanguage");
@@ -439,6 +440,7 @@ async function loadSettings() {
     simulateTypingInput.checked = Boolean(settings.simulate_typing);
     copyToClipboardInput.checked = Boolean(settings.copy_to_clipboard);
     autoStartInput.checked = Boolean(settings.auto_start);
+    autoUpdateInput.checked = Boolean(settings.auto_update ?? true); // Default to true
     useStreamingInput.checked = Boolean(settings.use_streaming);
     autoTranslateInput.checked = Boolean(settings.auto_translate);
     targetLanguageSelect.value = settings.target_language ?? "русский";
@@ -476,6 +478,7 @@ function currentSettings() {
     simulate_typing: simulateTypingInput.checked,
     copy_to_clipboard: copyToClipboardInput.checked,
     auto_start: autoStartInput.checked,
+    auto_update: autoUpdateInput.checked,
     use_streaming: useStreamingInput.checked,
     auto_translate: autoTranslateInput.checked,
     target_language: targetLanguageSelect.value,
