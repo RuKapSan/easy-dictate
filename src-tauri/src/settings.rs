@@ -17,6 +17,10 @@ pub enum TranscriptionProvider {
     OpenAI,
     Groq,
     ElevenLabs,
+    /// Mock provider for E2E testing without API keys
+    /// Returns a hardcoded response after a short delay
+    #[serde(rename = "mock")]
+    Mock,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -33,7 +37,12 @@ impl TranscriptionProvider {
             TranscriptionProvider::OpenAI => "OpenAI",
             TranscriptionProvider::Groq => "Groq",
             TranscriptionProvider::ElevenLabs => "ElevenLabs",
+            TranscriptionProvider::Mock => "Mock (Testing)",
         }
+    }
+
+    pub fn is_mock(&self) -> bool {
+        matches!(self, TranscriptionProvider::Mock)
     }
 }
 

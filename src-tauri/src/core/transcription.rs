@@ -49,10 +49,19 @@ impl TranscriptionService {
     }
 
     pub async fn perform(&self, settings: &AppSettings, audio_wav: Vec<u8>) -> Result<String> {
+        // Handle Mock provider for E2E testing
+        if settings.provider.is_mock() {
+            log::info!("[Transcription] Using Mock provider for testing");
+            // Simulate processing delay
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            return Ok("Mock transcription result for E2E testing".to_string());
+        }
+
         let transcription_api_key = match settings.provider {
             TranscriptionProvider::OpenAI => settings.api_key.trim().to_string(),
             TranscriptionProvider::Groq => settings.groq_api_key.trim().to_string(),
             TranscriptionProvider::ElevenLabs => settings.elevenlabs_api_key.trim().to_string(),
+            TranscriptionProvider::Mock => String::new(), // Already handled above
         };
 
         if transcription_api_key.is_empty() {
@@ -84,6 +93,10 @@ impl TranscriptionService {
                     language: String::new(),
                 };
                 self.elevenlabs.transcribe(el_request).await?
+            }
+            TranscriptionProvider::Mock => {
+                // Should never reach here - Mock is handled above
+                unreachable!("Mock provider should be handled earlier")
             }
         };
 

@@ -16,7 +16,7 @@ mod settings;
 
 use core::{
     commands,
-    events::{emit_status, StatusPhase},
+    events::{emit_error, emit_status, StatusPhase},
     hotkey,
     state::AppState,
     tray,
@@ -82,7 +82,13 @@ pub fn run() {
             if let Err(e) = commands::apply_autostart(handle, initial.auto_start) {
                 log::warn!("[Setup] Failed to apply autostart setting: {}", e);
             }
-            hotkey::rebind_hotkey(handle, &initial)?;
+            // Handle hotkey registration failure gracefully (e.g., when another instance is running)
+            // This allows the app to start but won't have hotkey functionality
+            if let Err(e) = hotkey::rebind_hotkey(handle, &initial) {
+                log::warn!("[Setup] Failed to register hotkey (another instance may be running): {}", e);
+                // Emit an error to let the user know
+                emit_error(handle, &format!("Hotkey registration failed: {}. Close other instances and restart.", e));
+            }
             emit_status(handle, StatusPhase::Idle, None);
 
             let status_item = tray::install_tray(handle)?;
@@ -129,6 +135,12 @@ pub fn run() {
             core::commands::elevenlabs_streaming_send_chunk,
             core::commands::elevenlabs_streaming_is_connected,
             core::commands::show_overlay_no_focus,
+            // Test mode commands
+            core::commands::inject_test_audio,
+            core::commands::get_test_state,
+            core::commands::simulate_hotkey_press,
+            core::commands::simulate_hotkey_release,
+            core::commands::show_main_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
