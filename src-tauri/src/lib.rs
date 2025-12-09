@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use tauri::{Manager, RunEvent};
 use tauri_plugin_log::{Target, TargetKind};
+use tauri_plugin_updater::UpdaterExt;
 
 mod audio;
 mod audio_stream;
