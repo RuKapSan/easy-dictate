@@ -30,15 +30,33 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Cache Cargo binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-bins-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bins-
+
       - name: Install E2E test dependencies
         working-directory: tests/e2e
         run: npm ci
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked
+        run: |
+          if ! command -v cargo-tauri &> /dev/null; then
+            cargo install tauri-cli --locked
+          else
+            echo "tauri-cli already installed"
+          fi
 
       - name: Install tauri-driver
-        run: cargo install tauri-driver --locked
+        run: |
+          if ! command -v tauri-driver &> /dev/null; then
+            cargo install tauri-driver --locked
+          else
+            echo "tauri-driver already installed"
+          fi
 
       - name: Build Tauri app (release)
         working-directory: src-tauri
