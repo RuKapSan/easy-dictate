@@ -34,6 +34,9 @@ jobs:
         working-directory: tests/e2e
         run: npm ci
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
       - name: Install tauri-driver
         run: cargo install tauri-driver --locked
 
