@@ -19,7 +19,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -30,9 +29,6 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
-      - name: Install frontend dependencies
-        run: npm ci
 
       - name: Install E2E test dependencies
         working-directory: tests/e2e
