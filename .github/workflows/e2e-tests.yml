@@ -38,6 +38,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-bins-
 
+      - name: Cache E2E node_modules
+        uses: actions/cache@v4
+        with:
+          path: tests/e2e/node_modules
+          key: ${{ runner.os }}-e2e-node-${{ hashFiles('tests/e2e/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-node-
+
       - name: Install E2E test dependencies
         working-directory: tests/e2e
         run: npm ci
