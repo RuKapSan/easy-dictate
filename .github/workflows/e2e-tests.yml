@@ -1,0 +1,75 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ master, feat/e2e-tests ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  e2e-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install E2E test dependencies
+        working-directory: tests/e2e
+        run: npm ci
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Build Tauri app (release)
+        run: npm run tauri build
+
+      - name: Run E2E tests
+        working-directory: tests/e2e
+        run: npm test
+        env:
+          CI: true
+
+      - name: Upload E2E screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: tests/e2e/screenshots/
+          retention-days: 7
+
+      - name: Upload E2E logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: tests/e2e/artifacts/logs/
+          retention-days: 7
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: tests/e2e/logs/
+          retention-days: 7
