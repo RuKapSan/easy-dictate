@@ -216,6 +216,57 @@ jobs:
           git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s (%h)" >> CHANGELOG.md
           cat CHANGELOG.md
 
+      - name: Generate updater manifest
+        id: manifest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Find the actual installer files
+          WIN_MSI=$(find artifacts/release-x86_64-pc-windows-msvc -name "*.msi" | head -1)
+          WIN_EXE=$(find artifacts/release-x86_64-pc-windows-msvc -name "*-setup.exe" | head -1)
+          LINUX_DEB=$(find artifacts/release-x86_64-unknown-linux-gnu -name "*.deb" | head -1)
+          LINUX_APPIMAGE=$(find artifacts/release-x86_64-unknown-linux-gnu -name "*.AppImage" | head -1)
+          MAC_INTEL_DMG=$(find artifacts/release-x86_64-apple-darwin -name "*.dmg" | head -1)
+          MAC_ARM_DMG=$(find artifacts/release-aarch64-apple-darwin -name "*.dmg" | head -1)
+
+          # Get base names for URLs
+          WIN_MSI_NAME=$(basename "$WIN_MSI")
+          WIN_EXE_NAME=$(basename "$WIN_EXE")
+          LINUX_DEB_NAME=$(basename "$LINUX_DEB")
+          LINUX_APPIMAGE_NAME=$(basename "$LINUX_APPIMAGE")
+          MAC_INTEL_DMG_NAME=$(basename "$MAC_INTEL_DMG")
+          MAC_ARM_DMG_NAME=$(basename "$MAC_ARM_DMG")
+
+          # Generate latest.json for Tauri updater
+          cat > latest.json << EOF
+          {
+            "version": "$VERSION",
+            "date": "$DATE",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "",
+                "url": "https://github.com/RuKapSan/easy-dictate/releases/download/v${VERSION}/${WIN_MSI_NAME}"
+              },
+              "linux-x86_64": {
+                "signature": "",
+                "url": "https://github.com/RuKapSan/easy-dictate/releases/download/v${VERSION}/${LINUX_APPIMAGE_NAME}"
+              },
+              "darwin-x86_64": {
+                "signature": "",
+                "url": "https://github.com/RuKapSan/easy-dictate/releases/download/v${VERSION}/${MAC_INTEL_DMG_NAME}"
+              },
+              "darwin-aarch64": {
+                "signature": "",
+                "url": "https://github.com/RuKapSan/easy-dictate/releases/download/v${VERSION}/${MAC_ARM_DMG_NAME}"
+              }
+            }
+          }
+          EOF
+
+          cat latest.json
+          echo "Updater manifest generated"
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -223,10 +274,13 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             --title "Easy Dictate v${{ steps.version.outputs.version }}" \
             --notes-file CHANGELOG.md \
+            latest.json \
             artifacts/release-*/*
 
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v1
         with:
-          files: artifacts/release-*/*
+          files: |
+            latest.json
+            artifacts/release-*/*
           fail_on_unmatched_files: true

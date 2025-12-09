@@ -38,6 +38,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle();
 
@@ -106,6 +107,36 @@ pub fn run() {
             if let Ok(log_dir) = resolver.app_log_dir() {
                 log::info!("[Log] File logging enabled: {}", log_dir.join("logs.log").display());
             }
+
+            // Check for updates on app start (background task)
+            let update_handle = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                log::info!("[Updater] Checking for updates...");
+                match update_handle.updater_builder().build() {
+                    Ok(updater) => match updater.check().await {
+                        Ok(Some(update)) => {
+                            log::info!("[Updater] Update available: {} -> {}", update.current_version, update.version);
+                            log::info!("[Updater] Update date: {}", update.date);
+
+                            // Auto-download and install the update
+                            match update.download_and_install(|chunk, total| {
+                                log::debug!("[Updater] Downloaded {} of {} bytes", chunk, total.unwrap_or(0));
+                            }, || {
+                                log::info!("[Updater] Download finished, installing...");
+                            }).await {
+                                Ok(_) => {
+                                    log::info!("[Updater] Update installed successfully. Restart required.");
+                                    // Note: App will restart automatically on next launch
+                                }
+                                Err(e) => log::error!("[Updater] Failed to download/install update: {}", e),
+                            }
+                        }
+                        Ok(None) => log::info!("[Updater] App is up to date"),
+                        Err(e) => log::warn!("[Updater] Failed to check for updates: {}", e),
+                    },
+                    Err(e) => log::error!("[Updater] Failed to build updater: {}", e),
+                }
+            });
 
             handle.on_menu_event(|app_handle, event| match event.id().as_ref() {
                 "open" => tray::show_settings_window(app_handle),
