@@ -108,11 +108,12 @@ pub fn run() {
                 log::info!("[Log] File logging enabled: {}", log_dir.join("logs.log").display());
             }
 
-            // Check for updates on app start (background task)
-            let update_handle = handle.clone();
-            tauri::async_runtime::spawn(async move {
-                log::info!("[Updater] Checking for updates...");
-                match update_handle.updater_builder().build() {
+            // Check for updates on app start (background task) - if enabled in settings
+            if initial.auto_update {
+                let update_handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    log::info!("[Updater] Checking for updates...");
+                    match update_handle.updater_builder().build() {
                     Ok(updater) => match updater.check().await {
                         Ok(Some(update)) => {
                             log::info!("[Updater] Update available: {} -> {}", update.current_version, update.version);
@@ -136,7 +137,10 @@ pub fn run() {
                     },
                     Err(e) => log::error!("[Updater] Failed to build updater: {}", e),
                 }
-            });
+                });
+            } else {
+                log::info!("[Updater] Auto-update disabled in settings");
+            }
 
             handle.on_menu_event(|app_handle, event| match event.id().as_ref() {
                 "open" => tray::show_settings_window(app_handle),
