@@ -138,6 +138,15 @@ async fn handle_hotkey_pressed_async(app: &AppHandle) -> Result<()> {
     }
 
     // Legacy recording mode
+
+    // For Mock provider in test mode, skip real recording
+    // Tests use inject_test_audio() to provide audio data directly
+    if settings.provider == TranscriptionProvider::Mock {
+        log::info!("[Hotkey] Mock provider - skipping real microphone recording");
+        emit_status(app, StatusPhase::Recording, Some("Mock recording (test mode)..."));
+        return Ok(());
+    }
+
     if state.is_transcribing().load(Ordering::SeqCst) {
         emit_status(
             app,
