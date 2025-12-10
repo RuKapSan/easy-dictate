@@ -503,8 +503,9 @@ function addCustomCommands(browser: WebdriverIO.Browser) {
     const state = await browser.execute(() => {
       // Get selected provider from radio buttons (new UI)
       let provider: string | null = null;
-      const providerRadios = document.querySelectorAll('input[name="provider"]') as NodeListOf<HTMLInputElement>;
-      for (const radio of providerRadios) {
+      const providerRadios = document.querySelectorAll('input[name="provider"]');
+      for (let i = 0; i < providerRadios.length; i++) {
+        const radio = providerRadios[i] as HTMLInputElement;
         if (radio.checked) {
           provider = radio.value;
           break;
