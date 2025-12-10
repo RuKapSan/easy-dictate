@@ -273,16 +273,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Find all installer files
+          INSTALLERS=$(find artifacts -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" \))
+          echo "Found installers:"
+          echo "$INSTALLERS"
+
+          # Create release with all files
           gh release create "${{ github.ref_name }}" \
             --title "Easy Dictate v${{ steps.version.outputs.version }}" \
             --notes-file CHANGELOG.md \
             latest.json \
-            artifacts/release-*/*
-
-      - name: Upload release artifacts
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            latest.json
-            artifacts/release-*/*
-          fail_on_unmatched_files: true
+            $INSTALLERS
