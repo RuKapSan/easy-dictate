@@ -50,6 +50,34 @@ pub async fn ping() -> Result<&'static str, String> {
 }
 
 #[tauri::command]
+pub async fn toggle_auto_translate(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let mut settings = state.current_settings().await;
+    settings.auto_translate = !settings.auto_translate;
+
+    // Persist the toggle
+    state
+        .persist_settings(&settings)
+        .await
+        .map_err(|err| err.to_string())?;
+    state.replace_settings(settings.clone()).await;
+
+    log::info!("[Toggle] Auto-translate now: {}", settings.auto_translate);
+
+    // Emit status update
+    let message = if settings.auto_translate {
+        "Translation enabled"
+    } else {
+        "Translation disabled"
+    };
+    emit_status(&app, StatusPhase::Idle, Some(message));
+
+    Ok(settings.auto_translate)
+}
+
+#[tauri::command]
 pub async fn frontend_log(level: Option<String>, message: String) -> Result<(), String> {
     let lvl = level.as_deref().unwrap_or("info");
     match lvl {
@@ -425,7 +453,7 @@ pub async fn get_test_state(
 #[tauri::command]
 pub async fn simulate_hotkey_press(app: AppHandle) -> Result<(), String> {
     log::info!("[TestMode] Simulating hotkey press");
-    super::hotkey::handle_hotkey_pressed(&app);
+    super::hotkey::handle_hotkey_pressed(&app, false);
     Ok(())
 }
 

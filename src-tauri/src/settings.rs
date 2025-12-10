@@ -64,6 +64,8 @@ pub struct AppSettings {
     pub elevenlabs_api_key: String,
     pub model: String,
     pub hotkey: String,
+    pub translate_hotkey: String,
+    pub toggle_translate_hotkey: String,
     pub simulate_typing: bool,
     pub copy_to_clipboard: bool,
     pub auto_start: bool,
@@ -85,6 +87,8 @@ impl Default for AppSettings {
             elevenlabs_api_key: String::new(),
             model: DEFAULT_MODEL.to_string(),
             hotkey: DEFAULT_HOTKEY.to_string(),
+            translate_hotkey: String::new(),
+            toggle_translate_hotkey: String::new(),
             simulate_typing: true,
             copy_to_clipboard: true,
             auto_start: false,
@@ -127,6 +131,8 @@ impl AppSettings {
             self.model.trim().to_string()
         };
         self.hotkey = self.normalized_hotkey();
+        self.translate_hotkey = self.translate_hotkey.trim().to_string();
+        self.toggle_translate_hotkey = self.toggle_translate_hotkey.trim().to_string();
         self.target_language = if self.target_language.trim().is_empty() {
             DEFAULT_TARGET_LANGUAGE.to_string()
         } else {

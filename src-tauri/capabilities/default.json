@@ -27,6 +27,7 @@
     "allow-settings",
     "allow-frontend-log",
     "allow-ping",
+    "allow-toggle-auto-translate",
     "allow-elevenlabs-streaming-connect",
     "allow-elevenlabs-streaming-disconnect",
     "allow-elevenlabs-streaming-open-gate",

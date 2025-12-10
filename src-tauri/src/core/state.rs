@@ -33,6 +33,7 @@ pub struct AppState {
     elevenlabs_streaming: ElevenLabsStreamingClient,
     audio_streaming_handle: Mutex<Option<AudioStreamingHandle>>,
     is_transcribing: AtomicBool,
+    force_translate: AtomicBool,
     tray_status_item: Mutex<Option<MenuItem<tauri::Wry>>>,
 }
 
@@ -59,6 +60,7 @@ impl AppState {
             elevenlabs_streaming,
             audio_streaming_handle: Mutex::new(None),
             is_transcribing: AtomicBool::new(false),
+            force_translate: AtomicBool::new(false),
             tray_status_item: Mutex::new(None),
         })
     }
@@ -101,5 +103,17 @@ impl AppState {
 
     pub fn audio_streaming_handle(&self) -> &Mutex<Option<AudioStreamingHandle>> {
         &self.audio_streaming_handle
+    }
+
+    pub fn set_force_translate(&self, force: bool) {
+        self.force_translate.store(force, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn get_force_translate(&self) -> bool {
+        self.force_translate.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn clear_force_translate(&self) {
+        self.force_translate.store(false, std::sync::atomic::Ordering::SeqCst);
     }
 }

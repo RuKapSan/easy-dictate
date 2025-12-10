@@ -147,7 +147,16 @@ pub fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let state: State<'_, AppState> = app_handle.state();
-        let settings = state.current_settings().await;
+        let mut settings = state.current_settings().await;
+
+        // Check if force_translate is set for this session
+        if state.get_force_translate() {
+            settings.auto_translate = true;
+            log::info!("[Transcription] Force translate enabled for this session");
+            // Clear the flag after using it
+            state.clear_force_translate();
+        }
+
         let service = state.transcription();
         let keyboard = service.keyboard();
 

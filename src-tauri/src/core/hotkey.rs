@@ -18,6 +18,7 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
         log::warn!("[Hotkey] Failed to unregister shortcuts: {}", e);
     }
 
+    // Register main hotkey (respects auto_translate setting)
     let hotkey = settings.normalized_hotkey();
     let hotkey_clone = hotkey.clone();
     shortcuts
@@ -25,7 +26,7 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
             hotkey.as_str(),
             move |app_handle, _shortcut, event| match event.state {
                 ShortcutState::Pressed => {
-                    handle_hotkey_pressed(app_handle);
+                    handle_hotkey_pressed(app_handle, false);
                 }
                 ShortcutState::Released => {
                     handle_hotkey_released(app_handle);
@@ -34,24 +35,93 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
         )
         .map_err(|err| anyhow!("Failed to register hotkey {hotkey_clone}: {err}"))?;
 
+    // Register translate hotkey (forces translation ON for this session)
+    if !settings.translate_hotkey.is_empty() {
+        let translate_hotkey = settings.translate_hotkey.trim().to_string();
+        let translate_hotkey_clone = translate_hotkey.clone();
+        shortcuts
+            .on_shortcut(
+                translate_hotkey.as_str(),
+                move |app_handle, _shortcut, event| match event.state {
+                    ShortcutState::Pressed => {
+                        handle_hotkey_pressed(app_handle, true);
+                    }
+                    ShortcutState::Released => {
+                        handle_hotkey_released(app_handle);
+                    }
+                },
+            )
+            .map_err(|err| anyhow!("Failed to register translate hotkey {translate_hotkey_clone}: {err}"))?;
+        log::info!("[Hotkey] Registered translate hotkey: {}", translate_hotkey);
+    }
+
+    // Register toggle translate hotkey
+    if !settings.toggle_translate_hotkey.is_empty() {
+        let toggle_hotkey = settings.toggle_translate_hotkey.trim().to_string();
+        let toggle_hotkey_clone = toggle_hotkey.clone();
+        shortcuts
+            .on_shortcut(
+                toggle_hotkey.as_str(),
+                move |app_handle, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        handle_toggle_translate_hotkey(app_handle);
+                    }
+                },
+            )
+            .map_err(|err| anyhow!("Failed to register toggle translate hotkey {toggle_hotkey_clone}: {err}"))?;
+        log::info!("[Hotkey] Registered toggle translate hotkey: {}", toggle_hotkey);
+    }
+
     Ok(())
 }
 
 /// Handle hotkey press event - spawns async task to avoid blocking the event thread
-pub fn handle_hotkey_pressed(app: &AppHandle) {
+/// force_translate: if true, translation will be forced ON regardless of settings
+pub fn handle_hotkey_pressed(app: &AppHandle, force_translate: bool) {
     let app_clone = app.clone();
 
     // Spawn async task to handle the press without blocking
     tauri::async_runtime::spawn(async move {
-        if let Err(err) = handle_hotkey_pressed_async(&app_clone).await {
+        if let Err(err) = handle_hotkey_pressed_async(&app_clone, force_translate).await {
             emit_error(&app_clone, &err.to_string());
         }
     });
 }
 
+/// Handle toggle translate hotkey - toggles auto_translate setting
+pub fn handle_toggle_translate_hotkey(app: &AppHandle) {
+    let app_clone = app.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let state: State<'_, AppState> = app_clone.state();
+        let mut settings = state.current_settings().await;
+        settings.auto_translate = !settings.auto_translate;
+
+        // Persist the toggle
+        if let Err(e) = state.persist_settings(&settings).await {
+            emit_error(&app_clone, &format!("Failed to save settings: {}", e));
+            return;
+        }
+        state.replace_settings(settings.clone()).await;
+
+        log::info!("[Toggle Hotkey] Auto-translate now: {}", settings.auto_translate);
+
+        // Emit status update
+        let message = if settings.auto_translate {
+            "Translation enabled"
+        } else {
+            "Translation disabled"
+        };
+        emit_status(&app_clone, StatusPhase::Idle, Some(message));
+    });
+}
+
 /// Async implementation of hotkey press handling
-async fn handle_hotkey_pressed_async(app: &AppHandle) -> Result<()> {
+async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> Result<()> {
     let state: State<'_, AppState> = app.state();
+
+    // Store force_translate flag for this transcription session
+    state.set_force_translate(force_translate);
 
     // Get settings once at the beginning
     let settings = state.current_settings().await;

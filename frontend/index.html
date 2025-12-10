@@ -74,6 +74,24 @@
           </div>
           <small class="hotkey-hint">Нажмите «Записать», затем удерживайте нужные клавиши</small>
         </label>
+        <label class="hotkey-label">
+          Горячая клавиша для записи с переводом
+          <div class="hotkey-row">
+            <button type="button" id="startTranslateHotkeyCapture">Записать</button>
+            <span id="translateHotkeyDisplay" data-placeholder="Не задана" data-empty="true">Не задана</span>
+            <input type="hidden" id="translateHotkey" />
+          </div>
+          <small class="hotkey-hint">Эта клавиша всегда переводит результат</small>
+        </label>
+        <label class="hotkey-label">
+          Горячая клавиша для переключения перевода
+          <div class="hotkey-row">
+            <button type="button" id="startToggleTranslateHotkeyCapture">Записать</button>
+            <span id="toggleTranslateHotkeyDisplay" data-placeholder="Не задана" data-empty="true">Не задана</span>
+            <input type="hidden" id="toggleTranslateHotkey" />
+          </div>
+          <small class="hotkey-hint">Переключает настройку «Переводить результат»</small>
+        </label>
         <label class="switch-row">
           <input type="checkbox" id="simulateTyping" />
           <span>Эмулировать ввод с клавиатуры</span>

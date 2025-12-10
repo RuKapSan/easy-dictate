@@ -99,6 +99,30 @@ describe('Easy Dictate Application', () => {
       await screenshots.capture(browser, 'ui_elements_verified');
     });
 
+    it('should have new hotkey UI elements', async () => {
+      logger.info('Checking new hotkey UI elements');
+
+      // Verify translate hotkey elements exist
+      const translateHotkeyBtn = await browser.$('#startTranslateHotkeyCapture');
+      expect(await translateHotkeyBtn.isExisting()).toBe(true);
+      logger.info('Translate hotkey button found');
+
+      const translateHotkeyDisplay = await browser.$('#translateHotkeyDisplay');
+      expect(await translateHotkeyDisplay.isExisting()).toBe(true);
+      logger.info('Translate hotkey display found');
+
+      // Verify toggle translate hotkey elements exist
+      const toggleTranslateHotkeyBtn = await browser.$('#startToggleTranslateHotkeyCapture');
+      expect(await toggleTranslateHotkeyBtn.isExisting()).toBe(true);
+      logger.info('Toggle translate hotkey button found');
+
+      const toggleTranslateHotkeyDisplay = await browser.$('#toggleTranslateHotkeyDisplay');
+      expect(await toggleTranslateHotkeyDisplay.isExisting()).toBe(true);
+      logger.info('Toggle translate hotkey display found');
+
+      await screenshots.capture(browser, 'new_hotkey_elements_verified');
+    });
+
     it('should display correct initial status', async () => {
       const statusOrb = await browser.$('#status-orb');
       const className = await statusOrb.getAttribute('class');
@@ -145,6 +169,8 @@ describe('Easy Dictate Application', () => {
       expect(settings).toBeDefined();
       expect(settings.provider).toBeDefined();
       expect(settings.hotkey).toBeDefined();
+      expect(settings.translate_hotkey).toBeDefined();
+      expect(settings.toggle_translate_hotkey).toBeDefined();
 
       await screenshots.capture(browser, 'settings_loaded');
     });

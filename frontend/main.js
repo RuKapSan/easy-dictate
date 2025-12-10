@@ -50,6 +50,12 @@ const modelSelect = document.getElementById("model");
 const hotkeyHiddenInput = document.getElementById("hotkey");
 const hotkeyDisplay = document.getElementById("hotkeyDisplay");
 const hotkeyRecordBtn = document.getElementById("startHotkeyCapture");
+const translateHotkeyHiddenInput = document.getElementById("translateHotkey");
+const translateHotkeyDisplay = document.getElementById("translateHotkeyDisplay");
+const translateHotkeyRecordBtn = document.getElementById("startTranslateHotkeyCapture");
+const toggleTranslateHotkeyHiddenInput = document.getElementById("toggleTranslateHotkey");
+const toggleTranslateHotkeyDisplay = document.getElementById("toggleTranslateHotkeyDisplay");
+const toggleTranslateHotkeyRecordBtn = document.getElementById("startToggleTranslateHotkeyCapture");
 const simulateTypingInput = document.getElementById("simulateTyping");
 const copyToClipboardInput = document.getElementById("copyToClipboard");
 const autoStartInput = document.getElementById("autoStart");
@@ -123,6 +129,7 @@ let initialSettings = null;
 let isCapturingHotkey = false;
 let hotkeyBeforeCapture = "";
 const pressedModifiers = new Set();
+let currentCapturingTarget = null; // 'main', 'translate', or 'toggle'
 
 function showToast(message, type = "info") {
   if (!toastEl) return;
@@ -191,74 +198,109 @@ function normalizeHotkeyValue(value) {
   return (value ?? "").trim();
 }
 
-function renderHotkey(value) {
-  const normalized = normalizeHotkeyValue(value);
-  if (hotkeyHiddenInput) {
-    hotkeyHiddenInput.value = normalized;
-  }
-  if (!hotkeyDisplay) return;
-  if (!normalized) {
-    hotkeyDisplay.textContent = hotkeyDisplay.dataset.placeholder ?? "";
-    hotkeyDisplay.dataset.empty = "true";
+function getHotkeyElements(target) {
+  if (target === 'translate') {
+    return {
+      hidden: translateHotkeyHiddenInput,
+      display: translateHotkeyDisplay,
+      button: translateHotkeyRecordBtn
+    };
+  } else if (target === 'toggle') {
+    return {
+      hidden: toggleTranslateHotkeyHiddenInput,
+      display: toggleTranslateHotkeyDisplay,
+      button: toggleTranslateHotkeyRecordBtn
+    };
   } else {
-    hotkeyDisplay.textContent = normalized;
-    hotkeyDisplay.dataset.empty = "false";
+    return {
+      hidden: hotkeyHiddenInput,
+      display: hotkeyDisplay,
+      button: hotkeyRecordBtn
+    };
   }
 }
 
-function applyHotkeyRecordingStyles(active, previewText) {
-  if (hotkeyRecordBtn) {
-    hotkeyRecordBtn.classList.toggle("recording", active);
-    hotkeyRecordBtn.textContent = active ? "Слушаю..." : "Записать";
+function renderHotkey(value, target = currentCapturingTarget || 'main') {
+  const normalized = normalizeHotkeyValue(value);
+  const elements = getHotkeyElements(target);
+
+  if (elements.hidden) {
+    elements.hidden.value = normalized;
   }
-  if (active && hotkeyDisplay) {
-    hotkeyDisplay.textContent = previewText ?? "Удерживайте клавиши";
-    hotkeyDisplay.dataset.empty = "false";
+  if (!elements.display) return;
+  if (!normalized) {
+    elements.display.textContent = elements.display.dataset.placeholder ?? "";
+    elements.display.dataset.empty = "true";
+  } else {
+    elements.display.textContent = normalized;
+    elements.display.dataset.empty = "false";
   }
 }
 
-function beginHotkeyCapture() {
+function applyHotkeyRecordingStyles(active, previewText, target = currentCapturingTarget || 'main') {
+  const elements = getHotkeyElements(target);
+
+  if (elements.button) {
+    elements.button.classList.toggle("recording", active);
+    elements.button.textContent = active ? "Слушаю..." : "Записать";
+  }
+  if (active && elements.display) {
+    elements.display.textContent = previewText ?? "Удерживайте клавиши";
+    elements.display.dataset.empty = "false";
+  }
+}
+
+function beginHotkeyCapture(target = 'main') {
   if (isCapturingHotkey) return;
   isCapturingHotkey = true;
-  hotkeyBeforeCapture = normalizeHotkeyValue(hotkeyHiddenInput?.value);
+  currentCapturingTarget = target;
+  const elements = getHotkeyElements(target);
+  hotkeyBeforeCapture = normalizeHotkeyValue(elements.hidden?.value);
   pressedModifiers.clear();
-  applyHotkeyRecordingStyles(true);
+  applyHotkeyRecordingStyles(true, null, target);
 }
 
 function cancelHotkeyCapture() {
   if (!isCapturingHotkey) return;
+  const target = currentCapturingTarget;
   isCapturingHotkey = false;
+  currentCapturingTarget = null;
   pressedModifiers.clear();
-  applyHotkeyRecordingStyles(false);
-  renderHotkey(hotkeyBeforeCapture);
+  applyHotkeyRecordingStyles(false, null, target);
+  renderHotkey(hotkeyBeforeCapture, target);
   hotkeyBeforeCapture = ""; // Clear to prevent memory leaks
 }
 
 function finishHotkeyCapture(binding) {
   console.log(`[HOTKEY] finishHotkeyCapture called with binding: ${binding}`);
   if (!isCapturingHotkey) return;
+  const target = currentCapturingTarget;
   isCapturingHotkey = false;
+  currentCapturingTarget = null;
   pressedModifiers.clear();
-  applyHotkeyRecordingStyles(false);
+  applyHotkeyRecordingStyles(false, null, target);
   const normalized = normalizeHotkeyValue(binding);
-  console.log(`[HOTKEY] Normalized binding: ${normalized}`);
+  console.log(`[HOTKEY] Normalized binding: ${normalized} for target: ${target}`);
   if (normalized) {
     if (!bindingHasMainKey(normalized)) {
       showToast("Сочетание должно содержать основную клавишу", "error");
-      renderHotkey(hotkeyBeforeCapture);
+      renderHotkey(hotkeyBeforeCapture, target);
       return;
     }
     if (bindingUsesMouse(normalized)) {
       showToast("Глобальные шорткаты мыши не поддерживаются Windows", "error");
-      renderHotkey(hotkeyBeforeCapture);
+      renderHotkey(hotkeyBeforeCapture, target);
       return;
     }
-    renderHotkey(normalized);
+    renderHotkey(normalized, target);
     const payload = currentSettings();
     console.log(`[HOTKEY] Calling persistSettings with payload:`, payload);
-    persistSettings(payload, "Горячая клавиша обновлена");
+    const successMsg = target === 'translate' ? "Горячая клавиша перевода обновлена"
+      : target === 'toggle' ? "Горячая клавиша переключения обновлена"
+      : "Горячая клавиша обновлена";
+    persistSettings(payload, successMsg);
   } else {
-    renderHotkey(hotkeyBeforeCapture);
+    renderHotkey(hotkeyBeforeCapture, target);
   }
 }
 
@@ -436,7 +478,9 @@ async function loadSettings() {
     elevenlabsApiKeyInput.value = settings.elevenlabs_api_key ?? "";
     modelSelect.value = settings.model ?? "gpt-4o-transcribe";
     updateProviderFields();
-    renderHotkey(settings.hotkey ?? DEFAULT_HOTKEY);
+    renderHotkey(settings.hotkey ?? DEFAULT_HOTKEY, 'main');
+    renderHotkey(settings.translate_hotkey ?? "", 'translate');
+    renderHotkey(settings.toggle_translate_hotkey ?? "", 'toggle');
     simulateTypingInput.checked = Boolean(settings.simulate_typing);
     copyToClipboardInput.checked = Boolean(settings.copy_to_clipboard);
     autoStartInput.checked = Boolean(settings.auto_start);
@@ -475,6 +519,8 @@ function currentSettings() {
     elevenlabs_api_key: elevenlabsApiKeyInput.value.trim(),
     model: modelSelect.value,
     hotkey: normalizeHotkeyValue(hotkeyHiddenInput?.value),
+    translate_hotkey: normalizeHotkeyValue(translateHotkeyHiddenInput?.value),
+    toggle_translate_hotkey: normalizeHotkeyValue(toggleTranslateHotkeyHiddenInput?.value),
     simulate_typing: simulateTypingInput.checked,
     copy_to_clipboard: copyToClipboardInput.checked,
     auto_start: autoStartInput.checked,
@@ -550,7 +596,25 @@ hotkeyRecordBtn?.addEventListener("click", () => {
   if (isCapturingHotkey) {
     cancelHotkeyCapture();
   } else {
-    beginHotkeyCapture();
+    beginHotkeyCapture('main');
+  }
+});
+
+translateHotkeyRecordBtn?.addEventListener("click", () => {
+  dbg("Translate hotkey record button clicked");
+  if (isCapturingHotkey) {
+    cancelHotkeyCapture();
+  } else {
+    beginHotkeyCapture('translate');
+  }
+});
+
+toggleTranslateHotkeyRecordBtn?.addEventListener("click", () => {
+  dbg("Toggle translate hotkey record button clicked");
+  if (isCapturingHotkey) {
+    cancelHotkeyCapture();
+  } else {
+    beginHotkeyCapture('toggle');
   }
 });
 
@@ -611,7 +675,10 @@ window.addEventListener("keyup", (event) => {
 window.addEventListener("mousedown", (event) => {
   dbg(`mousedown button=${event.button}`);
   if (!isCapturingHotkey) return;
-  if (event.target === hotkeyRecordBtn) return;
+  // Don't capture if clicking any of the record buttons
+  if (event.target === hotkeyRecordBtn ||
+      event.target === translateHotkeyRecordBtn ||
+      event.target === toggleTranslateHotkeyRecordBtn) return;
   event.preventDefault();
   event.stopPropagation();
   const binding = formatMouseHotkey(event);

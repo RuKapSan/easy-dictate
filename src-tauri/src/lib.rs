@@ -165,6 +165,7 @@ pub fn run() {
             core::commands::get_settings,
             core::commands::save_settings,
             core::commands::ping,
+            core::commands::toggle_auto_translate,
             core::commands::frontend_log,
             core::commands::elevenlabs_streaming_connect,
             core::commands::elevenlabs_streaming_disconnect,
