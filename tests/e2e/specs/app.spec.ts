@@ -234,6 +234,39 @@ describe('Easy Dictate Application', () => {
       await autoTranslate.click();
     });
 
+    it('should toggle auto-translate via command (hotkey simulation)', async () => {
+      // Get initial settings
+      const initialSettings = await browser.getSettings();
+      const initialAutoTranslate = initialSettings.auto_translate;
+      logger.info('Initial auto_translate state', { initialAutoTranslate });
+
+      // Call toggle_auto_translate command (what the hotkey does)
+      const toggleResult = await (browser as any).tauriInvoke('toggle_auto_translate');
+      logger.info('Toggle command result', toggleResult);
+
+      expect(toggleResult.success).toBe(true);
+      expect(toggleResult.result).toBe(!initialAutoTranslate);
+
+      // Verify settings changed
+      const newSettings = await browser.getSettings();
+      expect(newSettings.auto_translate).toBe(!initialAutoTranslate);
+      logger.info('Auto-translate toggled via command', {
+        before: initialAutoTranslate,
+        after: newSettings.auto_translate
+      });
+
+      await screenshots.capture(browser, 'toggle_command_executed');
+
+      // Toggle back to original state
+      const toggleBackResult = await (browser as any).tauriInvoke('toggle_auto_translate');
+      expect(toggleBackResult.success).toBe(true);
+      expect(toggleBackResult.result).toBe(initialAutoTranslate);
+
+      const restoredSettings = await browser.getSettings();
+      expect(restoredSettings.auto_translate).toBe(initialAutoTranslate);
+      logger.info('Auto-translate restored to original state');
+    });
+
     it('should save settings without errors', async () => {
       const settings = await browser.getSettings();
       logger.info('Current settings', settings);
