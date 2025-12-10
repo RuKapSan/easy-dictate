@@ -55,7 +55,10 @@ const translations = {
     'hotkeys.press': 'Нажмите...',
     'hotkeys.hold': 'Удерживайте...',
 
-    // Translation section
+    // Processing section (Translation + Instructions)
+    'processing.title': 'Обработка',
+
+    // Translation subsection
     'translation.title': 'Перевод',
     'translation.enable': 'Переводить результат',
     'translation.enable.hint': 'Автоперевод после распознавания',
@@ -79,6 +82,14 @@ const translations = {
     'instructions.enable': 'Свои инструкции',
     'instructions.enable.hint': 'Постобработка текста через LLM',
     'instructions.placeholder': 'Например: Сделай краткое резюме, исправь грамматику, отформатируй как список...',
+
+    // Vocabulary section
+    'vocabulary.enable': 'Словарь терминов',
+    'vocabulary.enable.hint': 'Исправление терминов через LLM',
+    'vocabulary.placeholder': 'По одному термину на строку:\nGroq\nTauri\nWebSocket',
+    'vocabulary.terms': 'терминов',
+    'vocabulary.import': 'Импорт',
+    'vocabulary.export': 'Экспорт',
 
     // Behavior section
     'behavior.title': 'Поведение',
@@ -175,7 +186,10 @@ const translations = {
     'hotkeys.press': 'Press...',
     'hotkeys.hold': 'Hold...',
 
-    // Translation section
+    // Processing section (Translation + Instructions)
+    'processing.title': 'Processing',
+
+    // Translation subsection
     'translation.title': 'Translation',
     'translation.enable': 'Translate result',
     'translation.enable.hint': 'Auto-translate after transcription',
@@ -199,6 +213,14 @@ const translations = {
     'instructions.enable': 'Custom instructions',
     'instructions.enable.hint': 'Post-process text via LLM',
     'instructions.placeholder': 'E.g.: Make a brief summary, fix grammar, format as list...',
+
+    // Vocabulary section
+    'vocabulary.enable': 'Custom vocabulary',
+    'vocabulary.enable.hint': 'Fix technical terms via LLM',
+    'vocabulary.placeholder': 'One term per line:\nGroq\nTauri\nWebSocket',
+    'vocabulary.terms': 'terms',
+    'vocabulary.import': 'Import',
+    'vocabulary.export': 'Export',
 
     // Behavior section
     'behavior.title': 'Behavior',

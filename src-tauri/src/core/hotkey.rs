@@ -186,7 +186,7 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
                     sample_rate,
                     language_code
                 );
-                connected = crate::core::commands::elevenlabs_streaming_connect(
+                match crate::core::commands::elevenlabs_streaming_connect(
                     app.clone(),
                     state.clone(),
                     api_key,
@@ -194,7 +194,18 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
                     language_code,
                 )
                 .await
-                .is_ok();
+                {
+                    Ok(()) => {
+                        log::info!("[Hotkey] Reconnection with last config successful");
+                        connected = true;
+                    }
+                    Err(e) => {
+                        log::error!("[Hotkey] Reconnection with last config failed: {}", e);
+                        connected = false;
+                    }
+                }
+            } else {
+                log::info!("[Hotkey] No last config available, will use settings fallback");
             }
 
             // Fallback to settings if no last config or reconnection failed
@@ -205,7 +216,8 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
                         "[Hotkey] ElevenLabs API key is empty; falling back to standard recording."
                     );
                 } else {
-                    connected = crate::core::commands::elevenlabs_streaming_connect(
+                    log::info!("[Hotkey] Using settings fallback to connect");
+                    match crate::core::commands::elevenlabs_streaming_connect(
                         app.clone(),
                         state.clone(),
                         api_key,
@@ -213,7 +225,16 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
                         "auto".to_string(),
                     )
                     .await
-                    .is_ok();
+                    {
+                        Ok(()) => {
+                            log::info!("[Hotkey] Settings fallback connection successful");
+                            connected = true;
+                        }
+                        Err(e) => {
+                            log::error!("[Hotkey] Settings fallback connection failed: {}", e);
+                            connected = false;
+                        }
+                    }
                 }
             }
 

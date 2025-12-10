@@ -17,8 +17,12 @@ impl RefinementRequest {
             .unwrap_or(false)
     }
 
+    pub fn has_vocabulary(&self) -> bool {
+        !self.vocabulary.is_empty()
+    }
+
     pub fn requires_refinement(&self) -> bool {
-        self.auto_translate || self.has_custom_instructions()
+        self.auto_translate || self.has_custom_instructions() || self.has_vocabulary()
     }
 
     pub fn system_prompt(&self) -> Option<String> {
@@ -27,12 +31,23 @@ impl RefinementRequest {
         }
 
         let mut directives = Vec::new();
+
+        // Vocabulary correction directive (first, so terms are fixed before other processing)
+        if self.has_vocabulary() {
+            let terms = self.vocabulary.join(", ");
+            directives.push(format!(
+                "Fix any misspelled technical terms. The correct spellings are: {}. If you see similar-sounding words that should be these terms, replace them.",
+                terms
+            ));
+        }
+
         if self.auto_translate {
             directives.push(format!(
                 "Translate the transcript into {}, keeping the original intent and tone.",
                 self.target_language
             ));
-        } else {
+        } else if !self.has_vocabulary() {
+            // Only add generic polish if not just doing vocabulary correction
             directives.push(
                 "Polish the transcript and fix clear mistakes while keeping intent.".to_string(),
             );
@@ -65,6 +80,7 @@ pub struct RefinementRequest {
     pub auto_translate: bool,
     pub target_language: String,
     pub custom_instructions: Option<String>,
+    pub vocabulary: Vec<String>,
 }
 
 #[derive(Clone)]

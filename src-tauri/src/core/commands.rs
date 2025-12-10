@@ -243,10 +243,10 @@ async fn audio_streaming_task(
     log::info!("[AudioStreaming] Task started");
 
     // Noise gate threshold (RMS amplitude)
-    // PCM16 max is 32767. 
-    // 500 ~= -36dB (conservative)
-    // 1000 ~= -30dB
-    const NOISE_THRESHOLD: f32 = 500.0;
+    // PCM16 max is 32767.
+    // 100 ~= -50dB (very quiet threshold to not filter out speech)
+    // 500 ~= -36dB (too aggressive, filters out normal speech)
+    const NOISE_THRESHOLD: f32 = 100.0;
 
     loop {
         tokio::select! {
@@ -274,11 +274,20 @@ async fn audio_streaming_task(
                             0.0
                         };
 
-                        // Apply noise gate
-                        if rms < NOISE_THRESHOLD {
-                            // Silence the chunk
-                            pcm_data.fill(0);
+                        // Log RMS periodically (every ~1 second = 10 chunks of 100ms)
+                        static CHUNK_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                        let count = CHUNK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if count % 10 == 0 {
+                            log::debug!("[AudioStreaming] RMS level: {:.0}", rms);
                         }
+
+                        // Noise gate temporarily disabled for debugging
+                        // TODO: Re-enable after fixing the issue
+                        // if rms < NOISE_THRESHOLD {
+                        //     // Silence the chunk
+                        //     pcm_data.fill(0);
+                        // }
+                        log::info!("[AudioStreaming] RMS level: {:.0}", rms);
 
                         // Send chunk to streaming client (will check gate internally)
                         if let Err(e) = streaming_client.send_audio_chunk(pcm_data).await {
@@ -437,8 +446,8 @@ pub async fn inject_test_audio(
     super::events::emit_status(&app, super::events::StatusPhase::Transcribing, Some("Processing test audio..."));
 
     match service.perform(&settings, audio_wav).await {
-        Ok(text) => {
-            let trimmed = text.trim().to_string();
+        Ok(result) => {
+            let trimmed = result.processed.trim().to_string();
             log::info!("[TestMode] Transcription result: {}", trimmed);
 
             super::events::emit_status(&app, super::events::StatusPhase::Success, None);

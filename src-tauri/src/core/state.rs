@@ -33,6 +33,15 @@ pub struct HistoryEntry {
     /// Target language if translated
     #[serde(default)]
     pub target_language: Option<String>,
+    /// Transcription provider used (e.g., "openai", "groq", "elevenlabs")
+    #[serde(default)]
+    pub transcription_provider: Option<String>,
+    /// LLM provider used for post-processing (e.g., "openai", "groq")
+    #[serde(default)]
+    pub llm_provider: Option<String>,
+    /// Whether custom instructions were applied
+    #[serde(default)]
+    pub custom_instructions_used: bool,
 }
 
 impl HistoryEntry {
@@ -42,6 +51,9 @@ impl HistoryEntry {
         translated: Option<String>,
         source_language: Option<String>,
         target_language: Option<String>,
+        transcription_provider: Option<String>,
+        llm_provider: Option<String>,
+        custom_instructions_used: bool,
     ) -> Self {
         Self {
             id,
@@ -50,6 +62,9 @@ impl HistoryEntry {
             translated_text: translated,
             source_language,
             target_language,
+            transcription_provider,
+            llm_provider,
+            custom_instructions_used,
         }
     }
 }
@@ -169,9 +184,12 @@ impl AppState {
         translated: Option<String>,
         source_language: Option<String>,
         target_language: Option<String>,
+        transcription_provider: Option<String>,
+        llm_provider: Option<String>,
+        custom_instructions_used: bool,
     ) -> HistoryEntry {
         let id = self.history_id_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let entry = HistoryEntry::new(id, original, translated, source_language, target_language);
+        let entry = HistoryEntry::new(id, original, translated, source_language, target_language, transcription_provider, llm_provider, custom_instructions_used);
 
         let mut history = self.history.write().await;
         history.push(entry.clone());

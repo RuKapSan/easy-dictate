@@ -367,10 +367,15 @@ describe('Easy Dictate Application', () => {
       const settings = await browser.getSettings();
       logger.info('Current settings', settings);
 
-      // Modify a setting
+      // Modify only non-hotkey settings to avoid registration conflicts
+      // Previous tests may have captured hotkeys that are already registered
       const newSettings = {
         ...settings,
-        simulate_typing: !settings.simulate_typing
+        simulate_typing: !settings.simulate_typing,
+        // Reset hotkeys to a known good state to avoid conflicts
+        hotkey: 'Ctrl+Shift+Space',
+        translate_hotkey: '',
+        toggle_translate_hotkey: ''
       };
 
       await browser.saveSettings(newSettings);
@@ -381,8 +386,13 @@ describe('Easy Dictate Application', () => {
       expect(reloadedSettings.simulate_typing).toBe(newSettings.simulate_typing);
       logger.info('Settings verified after save');
 
-      // Restore original
-      await browser.saveSettings(settings);
+      // Restore original with same safe hotkeys
+      await browser.saveSettings({
+        ...settings,
+        hotkey: 'Ctrl+Shift+Space',
+        translate_hotkey: '',
+        toggle_translate_hotkey: ''
+      });
     });
   });
 
@@ -451,6 +461,15 @@ describe('Easy Dictate Application', () => {
       logger.info('Captured hotkey', { captured });
 
       await screenshots.capture(browser, 'hotkey_captured');
+
+      // Reset hotkey to default to avoid conflicts with subsequent tests
+      const settings = await browser.getSettings();
+      await browser.saveSettings({
+        ...settings,
+        hotkey: 'Ctrl+Shift+Space',
+        translate_hotkey: '',
+        toggle_translate_hotkey: ''
+      });
     });
 
     it('should clear hotkey when clear button clicked', async () => {
@@ -491,6 +510,15 @@ describe('Easy Dictate Application', () => {
       );
 
       await screenshots.capture(browser, 'hotkey_cleared');
+
+      // Reset hotkey to default to avoid conflicts with subsequent tests
+      const settings = await browser.getSettings();
+      await browser.saveSettings({
+        ...settings,
+        hotkey: 'Ctrl+Shift+Space',
+        translate_hotkey: '',
+        toggle_translate_hotkey: ''
+      });
     });
   });
 

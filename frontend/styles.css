@@ -374,6 +374,65 @@ progress::-webkit-progress-value {
   border-radius: 4px;
 }
 
+.history-entry-provider {
+  font-size: 0.65rem;
+  padding: 2px 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border-radius: 3px;
+  text-transform: uppercase;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.history-entry-provider.elevenlabs {
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+}
+
+.history-entry-provider.openai {
+  background: rgba(16, 163, 127, 0.15);
+  color: #34d399;
+}
+
+.history-entry-provider.groq {
+  background: rgba(249, 115, 22, 0.15);
+  color: #fb923c;
+}
+
+.history-entry-provider.custom {
+  background: rgba(236, 72, 153, 0.15);
+  color: #f472b6;
+}
+
+.history-entry-original-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.history-entry-original {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+  flex: 1;
+  margin: 0;
+}
+
+.history-entry-btn.copy-original {
+  flex-shrink: 0;
+  padding: 2px;
+  opacity: 0.5;
+  transition: opacity var(--transition);
+}
+
+.history-entry-original-row:hover .history-entry-btn.copy-original {
+  opacity: 1;
+}
+
 .history-entry-actions {
   display: flex;
   gap: 4px;
@@ -414,12 +473,30 @@ progress::-webkit-progress-value {
   padding-bottom: 80px;
 }
 
+/* Two-column settings grid */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.settings-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Compact switches grid for two-column layout */
+.switches-grid.compact-grid {
+  grid-template-columns: 1fr;
+}
+
 .settings-group {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
-  margin-bottom: 12px;
 }
 
 .settings-group h3 {
@@ -842,6 +919,57 @@ textarea {
 
 .custom-instructions-field textarea {
   margin-top: 0;
+}
+
+/* Vocabulary field */
+.vocabulary-field {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.vocabulary-field[hidden] {
+  display: none;
+}
+
+.vocabulary-field textarea {
+  margin-top: 0;
+  min-height: 80px;
+  resize: vertical;
+}
+
+.vocabulary-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.vocabulary-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.vocabulary-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.vocabulary-btn {
+  padding: 4px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.vocabulary-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border-hover);
+  color: var(--text);
 }
 
 /* Sticky Actions */

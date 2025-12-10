@@ -87,6 +87,14 @@ const useCustomInstructionsInput = document.getElementById("useCustomInstruction
 const customInstructionsWrapper = document.getElementById("customInstructionsWrapper");
 const customInstructionsInput = document.getElementById("customInstructions");
 
+// Vocabulary
+const useVocabularyInput = document.getElementById("useVocabulary");
+const vocabularyWrapper = document.getElementById("vocabularyWrapper");
+const customVocabularyInput = document.getElementById("customVocabulary");
+const vocabularyCountEl = document.getElementById("vocabularyCount");
+const importVocabularyBtn = document.getElementById("importVocabulary");
+const exportVocabularyBtn = document.getElementById("exportVocabulary");
+
 // Actions
 const revertBtn = document.getElementById("revertBtn");
 
@@ -444,6 +452,62 @@ function syncCustomInstructionsUi() {
 }
 
 // ============================================================================
+// Vocabulary UI
+// ============================================================================
+
+function syncVocabularyUi() {
+  if (!vocabularyWrapper || !customVocabularyInput) return;
+  const enabled = Boolean(useVocabularyInput?.checked);
+  vocabularyWrapper.hidden = !enabled;
+  customVocabularyInput.disabled = !enabled;
+  updateVocabularyCount();
+}
+
+function getVocabularyArray() {
+  const text = customVocabularyInput?.value ?? "";
+  return text.split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+}
+
+function updateVocabularyCount() {
+  if (!vocabularyCountEl) return;
+  const count = getVocabularyArray().length;
+  const termsText = vocabularyCountEl.querySelector('[data-i18n="vocabulary.terms"]');
+  vocabularyCountEl.firstChild.textContent = count + ' ';
+  if (termsText) termsText.textContent = t('vocabulary.terms');
+}
+
+async function importVocabulary() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.txt';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const existing = getVocabularyArray();
+    const newTerms = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const merged = [...new Set([...existing, ...newTerms])];
+    if (customVocabularyInput) customVocabularyInput.value = merged.join('\n');
+    updateVocabularyCount();
+  };
+  input.click();
+}
+
+function exportVocabulary() {
+  const terms = getVocabularyArray();
+  if (terms.length === 0) return;
+  const blob = new Blob([terms.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'vocabulary.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================================
 // Toggle Password Visibility
 // ============================================================================
 
@@ -512,8 +576,16 @@ async function loadSettings() {
     if (useCustomInstructionsInput) useCustomInstructionsInput.checked = Boolean(settings.use_custom_instructions);
     if (customInstructionsInput) customInstructionsInput.value = settings.custom_instructions ?? "";
 
+    // Vocabulary
+    if (useVocabularyInput) useVocabularyInput.checked = Boolean(settings.use_vocabulary);
+    if (customVocabularyInput) {
+      const vocab = settings.custom_vocabulary ?? [];
+      customVocabularyInput.value = vocab.join('\n');
+    }
+
     syncTranslationUi();
     syncCustomInstructionsUi();
+    syncVocabularyUi();
 
     // Initialize ElevenLabs streaming if needed
     if (window.ElevenLabsSTT?.init) {
@@ -546,6 +618,8 @@ function currentSettings() {
     target_language: targetLanguageSelect?.value ?? "русский",
     use_custom_instructions: useCustomInstructionsInput?.checked ?? false,
     custom_instructions: (customInstructionsInput?.value ?? "").trim(),
+    use_vocabulary: useVocabularyInput?.checked ?? false,
+    custom_vocabulary: getVocabularyArray(),
   };
 }
 
@@ -643,6 +717,12 @@ autoTranslateInput?.addEventListener("change", syncTranslationUi);
 // Custom instructions toggle
 useCustomInstructionsInput?.addEventListener("change", syncCustomInstructionsUi);
 
+// Vocabulary toggle and buttons
+useVocabularyInput?.addEventListener("change", syncVocabularyUi);
+customVocabularyInput?.addEventListener("input", updateVocabularyCount);
+importVocabularyBtn?.addEventListener("click", importVocabulary);
+exportVocabularyBtn?.addEventListener("click", exportVocabulary);
+
 // Keyboard events for hotkey capture
 window.addEventListener("keydown", (event) => {
   if (!isCapturingHotkey) return;
@@ -725,29 +805,64 @@ function renderHistory(entries) {
 
   historyListEl.innerHTML = entries.map(entry => {
     const time = formatHistoryTime(entry.timestamp);
-    const text = escapeHtml(entry.original_text);
     const hasTranslation = entry.translated_text && entry.translated_text !== entry.original_text;
 
+    // Show translated text as main if available, otherwise original
+    const mainText = hasTranslation ? escapeHtml(entry.translated_text) : escapeHtml(entry.original_text);
+    const originalText = hasTranslation ? escapeHtml(entry.original_text) : null;
+
+    // Provider badges
+    let providerBadges = '';
+    if (entry.transcription_provider) {
+      const provider = entry.transcription_provider.toLowerCase();
+      providerBadges += `<span class="history-entry-provider ${provider}">${provider}</span>`;
+    }
+    if (entry.llm_provider) {
+      const llm = entry.llm_provider.toLowerCase();
+      providerBadges += `<span class="history-entry-provider ${llm}">+${llm}</span>`;
+    }
+    if (entry.custom_instructions_used) {
+      providerBadges += `<span class="history-entry-provider custom">custom</span>`;
+    }
+
     // Language badges
-    let badges = '';
+    let langBadges = '';
     if (entry.source_language) {
-      badges += `<span class="history-entry-lang">${entry.source_language}</span>`;
+      langBadges += `<span class="history-entry-lang">${entry.source_language}</span>`;
     }
     if (hasTranslation && entry.target_language) {
-      badges += `<span class="history-entry-translated">→ ${entry.target_language}</span>`;
+      langBadges += `<span class="history-entry-translated">→ ${entry.target_language}</span>`;
     }
+
+    // Text to copy - prefer translated if available
+    const textToCopy = hasTranslation ? entry.translated_text : entry.original_text;
+
+    // Build original text row with its own copy button
+    const originalRow = originalText ? `
+      <div class="history-entry-original-row">
+        <p class="history-entry-original">${originalText}</p>
+        <button type="button" class="history-entry-btn copy-original" title="Копировать оригинал" data-text="${escapeAttr(entry.original_text)}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+    ` : '';
 
     return `
       <div class="history-entry" data-id="${entry.id}">
         <div class="history-entry-content">
-          <p class="history-entry-text">${text}</p>
+          <p class="history-entry-text">${mainText}</p>
+          ${originalRow}
           <div class="history-entry-meta">
             <span class="history-entry-time">${time}</span>
-            ${badges}
+            ${providerBadges}
+            ${langBadges}
           </div>
         </div>
         <div class="history-entry-actions">
-          <button type="button" class="history-entry-btn copy" title="Копировать" data-text="${escapeAttr(entry.original_text)}">
+          <button type="button" class="history-entry-btn copy" title="Копировать" data-text="${escapeAttr(textToCopy)}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -773,6 +888,15 @@ function renderHistory(entries) {
   });
 
   historyListEl.querySelectorAll('.history-entry-btn.copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = btn.dataset.text;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(t('toast.copied'), "success");
+      });
+    });
+  });
+
+  historyListEl.querySelectorAll('.history-entry-btn.copy-original').forEach(btn => {
     btn.addEventListener('click', () => {
       const text = btn.dataset.text;
       navigator.clipboard.writeText(text).then(() => {

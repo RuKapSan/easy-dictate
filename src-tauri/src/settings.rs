@@ -76,6 +76,8 @@ pub struct AppSettings {
     pub target_language: String,
     pub use_custom_instructions: bool,
     pub custom_instructions: String,
+    pub use_vocabulary: bool,
+    pub custom_vocabulary: Vec<String>,
 }
 
 impl Default for AppSettings {
@@ -100,6 +102,8 @@ impl Default for AppSettings {
             target_language: DEFAULT_TARGET_LANGUAGE.to_string(),
             use_custom_instructions: false,
             custom_instructions: String::new(),
+            use_vocabulary: false,
+            custom_vocabulary: Vec::new(),
         }
     }
 }
@@ -111,6 +115,7 @@ pub enum SettingsValidationError {
     #[error("Global hotkey '{0}' is not valid.")]
     InvalidHotkey(String),
     #[error("{0} API key is required.")]
+    #[allow(dead_code)]
     MissingApiKey(&'static str),
 }
 
@@ -223,6 +228,7 @@ impl AppSettings {
     pub fn requires_llm(&self) -> bool {
         self.auto_translate
             || (self.use_custom_instructions && !self.custom_instructions.trim().is_empty())
+            || (self.use_vocabulary && !self.custom_vocabulary.is_empty())
     }
 
     pub fn validate(&self) -> Result<(), SettingsValidationError> {
@@ -244,6 +250,7 @@ impl AppSettings {
 
     /// Validate that required API keys are present for the current configuration
     /// This should be called before performing transcription, not during settings save
+    #[allow(dead_code)]
     pub fn validate_for_transcription(&self) -> Result<(), SettingsValidationError> {
         match self.provider {
             TranscriptionProvider::Mock => {} // Mock doesn't need API key

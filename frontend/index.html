@@ -68,240 +68,269 @@
   <!-- Settings Tab -->
   <main class="tab-content" data-tab="settings">
     <form id="settings-form">
-      <!-- Provider & API Keys Section -->
-      <section class="settings-group">
-        <h3 data-i18n="provider.title">Transcription Provider</h3>
-        <div class="provider-selector">
-          <label class="provider-option">
-            <input type="radio" name="provider" value="openai" />
-            <span class="provider-card">
-              <span class="provider-name" data-i18n="provider.openai.name">OpenAI</span>
-              <span class="provider-desc" data-i18n="provider.openai.desc">Whisper, GPT-4o</span>
-            </span>
-          </label>
-          <label class="provider-option">
-            <input type="radio" name="provider" value="groq" checked />
-            <span class="provider-card">
-              <span class="provider-name" data-i18n="provider.groq.name">Groq</span>
-              <span class="provider-desc" data-i18n="provider.groq.desc">Fast and free</span>
-            </span>
-          </label>
-          <label class="provider-option">
-            <input type="radio" name="provider" value="elevenlabs" />
-            <span class="provider-card">
-              <span class="provider-name" data-i18n="provider.elevenlabs.name">ElevenLabs</span>
-              <span class="provider-desc" data-i18n="provider.elevenlabs.desc">Realtime streaming</span>
-            </span>
-          </label>
-        </div>
+      <!-- Two-column layout -->
+      <div class="settings-grid">
+        <!-- LEFT COLUMN -->
+        <div class="settings-column">
+          <!-- Transcription Section -->
+          <section class="settings-group">
+            <h3 data-i18n="provider.title">Transcription</h3>
+            <div class="provider-selector">
+              <label class="provider-option">
+                <input type="radio" name="provider" value="openai" />
+                <span class="provider-card">
+                  <span class="provider-name" data-i18n="provider.openai.name">OpenAI</span>
+                  <span class="provider-desc" data-i18n="provider.openai.desc">Whisper, GPT-4o</span>
+                </span>
+              </label>
+              <label class="provider-option">
+                <input type="radio" name="provider" value="groq" checked />
+                <span class="provider-card">
+                  <span class="provider-name" data-i18n="provider.groq.name">Groq</span>
+                  <span class="provider-desc" data-i18n="provider.groq.desc">Fast and free</span>
+                </span>
+              </label>
+              <label class="provider-option">
+                <input type="radio" name="provider" value="elevenlabs" />
+                <span class="provider-card">
+                  <span class="provider-name" data-i18n="provider.elevenlabs.name">ElevenLabs</span>
+                  <span class="provider-desc" data-i18n="provider.elevenlabs.desc">Realtime streaming</span>
+                </span>
+              </label>
+            </div>
 
-        <!-- API Key - shows only for selected provider -->
-        <div class="api-key-field" id="openai-api-key-field">
-          <label>
-            <span data-i18n="apikey.openai">OpenAI API Key</span>
-            <div class="password-field">
-              <input type="password" id="apiKey" autocomplete="off" placeholder="sk-..." />
-              <button type="button" class="toggle-password" data-target="apiKey" data-i18n-title="apikey.show" title="Show/hide">
-                <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              </button>
+            <!-- API Keys -->
+            <div class="api-key-field" id="openai-api-key-field">
+              <label>
+                <span data-i18n="apikey.openai">OpenAI API Key</span>
+                <div class="password-field">
+                  <input type="password" id="apiKey" autocomplete="off" placeholder="sk-..." />
+                  <button type="button" class="toggle-password" data-target="apiKey" data-i18n-title="apikey.show" title="Show/hide">
+                    <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </button>
+                </div>
+              </label>
             </div>
-          </label>
-        </div>
-        <div class="api-key-field" id="groq-api-key-field" hidden>
-          <label>
-            <span data-i18n="apikey.groq">Groq API Key</span>
-            <div class="password-field">
-              <input type="password" id="groqApiKey" autocomplete="off" placeholder="gsk_..." />
-              <button type="button" class="toggle-password" data-target="groqApiKey" data-i18n-title="apikey.show" title="Show/hide">
-                <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              </button>
+            <div class="api-key-field" id="groq-api-key-field" hidden>
+              <label>
+                <span data-i18n="apikey.groq">Groq API Key</span>
+                <div class="password-field">
+                  <input type="password" id="groqApiKey" autocomplete="off" placeholder="gsk_..." />
+                  <button type="button" class="toggle-password" data-target="groqApiKey" data-i18n-title="apikey.show" title="Show/hide">
+                    <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </button>
+                </div>
+              </label>
             </div>
-          </label>
-        </div>
-        <div class="api-key-field" id="elevenlabs-api-key-field" hidden>
-          <label>
-            <span data-i18n="apikey.elevenlabs">ElevenLabs API Key</span>
-            <div class="password-field">
-              <input type="password" id="elevenlabsApiKey" autocomplete="off" placeholder="sk_..." />
-              <button type="button" class="toggle-password" data-target="elevenlabsApiKey" data-i18n-title="apikey.show" title="Show/hide">
-                <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              </button>
+            <div class="api-key-field" id="elevenlabs-api-key-field" hidden>
+              <label>
+                <span data-i18n="apikey.elevenlabs">ElevenLabs API Key</span>
+                <div class="password-field">
+                  <input type="password" id="elevenlabsApiKey" autocomplete="off" placeholder="sk_..." />
+                  <button type="button" class="toggle-password" data-target="elevenlabsApiKey" data-i18n-title="apikey.show" title="Show/hide">
+                    <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </button>
+                </div>
+              </label>
             </div>
-          </label>
-        </div>
 
-        <label>
-          <span data-i18n="model.label">Model</span>
-          <select id="model">
-            <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
-            <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
-            <option value="whisper-1">whisper-1 (fallback)</option>
-            <option value="groq/whisper-large-v3-turbo" selected>Groq Whisper Large v3 Turbo</option>
-            <option value="groq/whisper-large-v3">Groq Whisper Large v3</option>
-          </select>
-        </label>
-      </section>
-
-      <!-- Hotkeys Section -->
-      <section class="settings-group">
-        <h3 data-i18n="hotkeys.title">Hotkeys</h3>
-        <div class="hotkeys-grid">
-          <div class="hotkey-item">
-            <span class="hotkey-label-text" data-i18n="hotkeys.main">Main</span>
-            <div class="hotkey-row">
-              <span id="hotkeyDisplay" class="hotkey-field" tabindex="0" data-i18n-placeholder="hotkeys.notset" data-placeholder="Not set" data-empty="true">Not set</span>
-              <button type="button" class="hotkey-clear" id="hotkeyClear" data-i18n-title="hotkeys.reset" title="Reset">&times;</button>
-              <input type="hidden" id="hotkey" />
-            </div>
-          </div>
-          <div class="hotkey-item">
-            <span class="hotkey-label-text" data-i18n="hotkeys.translate">With translation</span>
-            <div class="hotkey-row">
-              <span id="translateHotkeyDisplay" class="hotkey-field" tabindex="0" data-i18n-placeholder="hotkeys.notset" data-placeholder="Not set" data-empty="true">Not set</span>
-              <button type="button" class="hotkey-clear" id="translateHotkeyClear" data-i18n-title="hotkeys.reset" title="Reset">&times;</button>
-              <input type="hidden" id="translateHotkey" />
-            </div>
-          </div>
-          <div class="hotkey-item">
-            <span class="hotkey-label-text" data-i18n="hotkeys.toggle">Toggle translation</span>
-            <div class="hotkey-row">
-              <span id="toggleTranslateHotkeyDisplay" class="hotkey-field" tabindex="0" data-i18n-placeholder="hotkeys.notset" data-placeholder="Not set" data-empty="true">Not set</span>
-              <button type="button" class="hotkey-clear" id="toggleTranslateHotkeyClear" data-i18n-title="hotkeys.reset" title="Reset">&times;</button>
-              <input type="hidden" id="toggleTranslateHotkey" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Translation Section -->
-      <section class="settings-group translation-group">
-        <h3 data-i18n="translation.title">Translation</h3>
-        <label class="switch-row">
-          <input type="checkbox" id="autoTranslate" />
-          <span class="switch-text">
-            <span class="switch-title" data-i18n="translation.enable">Translate result</span>
-            <span class="switch-hint" data-i18n="translation.enable.hint">Auto-translate after transcription</span>
-          </span>
-        </label>
-        <div class="translation-options" id="translationOptions">
-          <div class="inline-fields">
-            <label class="inline-field">
-              <span data-i18n="translation.language">Language</span>
-              <select id="targetLanguage">
-                <option value="Russian" data-i18n="lang.russian">Russian</option>
-                <option value="English" data-i18n="lang.english">English</option>
-                <option value="German" data-i18n="lang.german">German</option>
-                <option value="French" data-i18n="lang.french">French</option>
-                <option value="Spanish" data-i18n="lang.spanish">Spanish</option>
-                <option value="Italian" data-i18n="lang.italian">Italian</option>
-                <option value="Portuguese" data-i18n="lang.portuguese">Portuguese</option>
-                <option value="Chinese" data-i18n="lang.chinese">Chinese</option>
-                <option value="Japanese" data-i18n="lang.japanese">Japanese</option>
-                <option value="Korean" data-i18n="lang.korean">Korean</option>
+            <label>
+              <span data-i18n="model.label">Model</span>
+              <select id="model">
+                <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
+                <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
+                <option value="whisper-1">whisper-1 (fallback)</option>
+                <option value="groq/whisper-large-v3-turbo" selected>Groq Whisper Large v3 Turbo</option>
+                <option value="groq/whisper-large-v3">Groq Whisper Large v3</option>
               </select>
             </label>
-            <label class="inline-field">
-              <span data-i18n="translation.llm">LLM</span>
-              <select id="llmProvider">
-                <option value="openai">OpenAI GPT-4o-mini</option>
-                <option value="groq" selected>Groq Llama</option>
+          </section>
+
+          <!-- Hotkeys Section -->
+          <section class="settings-group">
+            <h3 data-i18n="hotkeys.title">Hotkeys</h3>
+            <div class="hotkeys-grid">
+              <div class="hotkey-item">
+                <span class="hotkey-label-text" data-i18n="hotkeys.main">Main</span>
+                <div class="hotkey-row">
+                  <span id="hotkeyDisplay" class="hotkey-field" tabindex="0" data-i18n-placeholder="hotkeys.notset" data-placeholder="Not set" data-empty="true">Not set</span>
+                  <button type="button" class="hotkey-clear" id="hotkeyClear" data-i18n-title="hotkeys.reset" title="Reset">&times;</button>
+                  <input type="hidden" id="hotkey" />
+                </div>
+              </div>
+              <div class="hotkey-item">
+                <span class="hotkey-label-text" data-i18n="hotkeys.translate">With translation</span>
+                <div class="hotkey-row">
+                  <span id="translateHotkeyDisplay" class="hotkey-field" tabindex="0" data-i18n-placeholder="hotkeys.notset" data-placeholder="Not set" data-empty="true">Not set</span>
+                  <button type="button" class="hotkey-clear" id="translateHotkeyClear" data-i18n-title="hotkeys.reset" title="Reset">&times;</button>
+                  <input type="hidden" id="translateHotkey" />
+                </div>
+              </div>
+              <div class="hotkey-item">
+                <span class="hotkey-label-text" data-i18n="hotkeys.toggle">Toggle translation</span>
+                <div class="hotkey-row">
+                  <span id="toggleTranslateHotkeyDisplay" class="hotkey-field" tabindex="0" data-i18n-placeholder="hotkeys.notset" data-placeholder="Not set" data-empty="true">Not set</span>
+                  <button type="button" class="hotkey-clear" id="toggleTranslateHotkeyClear" data-i18n-title="hotkeys.reset" title="Reset">&times;</button>
+                  <input type="hidden" id="toggleTranslateHotkey" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Behavior Section -->
+          <section class="settings-group">
+            <h3 data-i18n="behavior.title">Behavior</h3>
+            <div class="switches-grid compact-grid">
+              <label class="switch-row compact">
+                <input type="checkbox" id="simulateTyping" />
+                <span class="switch-text">
+                  <span class="switch-title" data-i18n="behavior.typing">Simulate typing</span>
+                  <span class="switch-hint" data-i18n="behavior.typing.hint">Type text into active window</span>
+                </span>
+              </label>
+              <label class="switch-row compact">
+                <input type="checkbox" id="copyToClipboard" />
+                <span class="switch-text">
+                  <span class="switch-title" data-i18n="behavior.clipboard">Copy to clipboard</span>
+                  <span class="switch-hint" data-i18n="behavior.clipboard.hint">Copy result to clipboard</span>
+                </span>
+              </label>
+              <label class="switch-row compact">
+                <input type="checkbox" id="useStreaming" checked />
+                <span class="switch-text">
+                  <span class="switch-title" data-i18n="behavior.streaming">Realtime text</span>
+                  <span class="switch-hint" data-i18n="behavior.streaming.hint">Show text while recording</span>
+                </span>
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <!-- RIGHT COLUMN -->
+        <div class="settings-column">
+          <!-- Processing Section (Translation + Instructions combined) -->
+          <section class="settings-group">
+            <h3 data-i18n="processing.title">Processing</h3>
+
+            <!-- Translation toggle -->
+            <label class="switch-row">
+              <input type="checkbox" id="autoTranslate" />
+              <span class="switch-text">
+                <span class="switch-title" data-i18n="translation.enable">Translate result</span>
+                <span class="switch-hint" data-i18n="translation.enable.hint">Auto-translate after transcription</span>
+              </span>
+            </label>
+            <div class="translation-options" id="translationOptions">
+              <div class="inline-fields">
+                <label class="inline-field">
+                  <span data-i18n="translation.language">Language</span>
+                  <select id="targetLanguage">
+                    <option value="Russian" data-i18n="lang.russian">Russian</option>
+                    <option value="English" data-i18n="lang.english">English</option>
+                    <option value="German" data-i18n="lang.german">German</option>
+                    <option value="French" data-i18n="lang.french">French</option>
+                    <option value="Spanish" data-i18n="lang.spanish">Spanish</option>
+                    <option value="Italian" data-i18n="lang.italian">Italian</option>
+                    <option value="Portuguese" data-i18n="lang.portuguese">Portuguese</option>
+                    <option value="Chinese" data-i18n="lang.chinese">Chinese</option>
+                    <option value="Japanese" data-i18n="lang.japanese">Japanese</option>
+                    <option value="Korean" data-i18n="lang.korean">Korean</option>
+                  </select>
+                </label>
+                <label class="inline-field">
+                  <span data-i18n="translation.llm">LLM</span>
+                  <select id="llmProvider">
+                    <option value="openai">OpenAI GPT-4o-mini</option>
+                    <option value="groq" selected>Groq Llama</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <!-- Custom instructions toggle -->
+            <label class="switch-row" style="margin-top: 12px;">
+              <input type="checkbox" id="useCustomInstructions" />
+              <span class="switch-text">
+                <span class="switch-title" data-i18n="instructions.enable">Custom instructions</span>
+                <span class="switch-hint" data-i18n="instructions.enable.hint">Post-process text via LLM</span>
+              </span>
+            </label>
+            <div class="custom-instructions-field" id="customInstructionsWrapper">
+              <textarea id="customInstructions" rows="3"
+                data-i18n-placeholder="instructions.placeholder"
+                placeholder="E.g.: Make a brief summary, fix grammar, format as list..."></textarea>
+            </div>
+
+            <!-- Vocabulary toggle -->
+            <label class="switch-row" style="margin-top: 12px;">
+              <input type="checkbox" id="useVocabulary" />
+              <span class="switch-text">
+                <span class="switch-title" data-i18n="vocabulary.enable">Custom vocabulary</span>
+                <span class="switch-hint" data-i18n="vocabulary.enable.hint">Fix technical terms via LLM</span>
+              </span>
+            </label>
+            <div class="vocabulary-field" id="vocabularyWrapper">
+              <textarea id="customVocabulary" rows="4"
+                data-i18n-placeholder="vocabulary.placeholder"
+                placeholder="One term per line: Groq, Tauri, WebSocket..."></textarea>
+              <div class="vocabulary-footer">
+                <span class="vocabulary-count" id="vocabularyCount">0 <span data-i18n="vocabulary.terms">terms</span></span>
+                <div class="vocabulary-actions">
+                  <button type="button" class="vocabulary-btn" id="importVocabulary" data-i18n="vocabulary.import">Import</button>
+                  <button type="button" class="vocabulary-btn" id="exportVocabulary" data-i18n="vocabulary.export">Export</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- System Section -->
+          <section class="settings-group">
+            <h3 data-i18n="system.title">System</h3>
+            <div class="switches-grid compact-grid">
+              <label class="switch-row compact">
+                <input type="checkbox" id="autoStart" />
+                <span class="switch-text">
+                  <span class="switch-title" data-i18n="system.autostart">Auto-start</span>
+                  <span class="switch-hint" data-i18n="system.autostart.hint">Launch on Windows startup</span>
+                </span>
+              </label>
+              <label class="switch-row compact">
+                <input type="checkbox" id="startMinimized" />
+                <span class="switch-text">
+                  <span class="switch-title" data-i18n="system.tray">Start minimized</span>
+                  <span class="switch-hint" data-i18n="system.tray.hint">Minimize to tray on launch</span>
+                </span>
+              </label>
+              <label class="switch-row compact">
+                <input type="checkbox" id="autoUpdate" checked />
+                <span class="switch-text">
+                  <span class="switch-title" data-i18n="system.autoupdate">Auto-update</span>
+                  <span class="switch-hint" data-i18n="system.autoupdate.hint">Check for new versions</span>
+                </span>
+              </label>
+            </div>
+            <!-- Language selector -->
+            <label class="language-selector">
+              <span data-i18n="system.language">Interface language</span>
+              <select id="uiLanguage">
+                <option value="en">English</option>
+                <option value="ru">Русский</option>
               </select>
             </label>
-          </div>
+          </section>
         </div>
-      </section>
+      </div>
 
-      <!-- Custom Instructions Section -->
-      <section class="settings-group">
-        <h3 data-i18n="instructions.title">Instructions</h3>
-        <label class="switch-row">
-          <input type="checkbox" id="useCustomInstructions" />
-          <span class="switch-text">
-            <span class="switch-title" data-i18n="instructions.enable">Custom instructions</span>
-            <span class="switch-hint" data-i18n="instructions.enable.hint">Post-process text via LLM</span>
-          </span>
-        </label>
-        <div class="custom-instructions-field" id="customInstructionsWrapper">
-          <textarea id="customInstructions" rows="4"
-            data-i18n-placeholder="instructions.placeholder"
-            placeholder="E.g.: Make a brief summary, fix grammar, format as list..."></textarea>
-        </div>
-      </section>
-
-      <!-- Behavior Section -->
-      <section class="settings-group">
-        <h3 data-i18n="behavior.title">Behavior</h3>
-        <div class="switches-grid">
-          <label class="switch-row compact">
-            <input type="checkbox" id="simulateTyping" />
-            <span class="switch-text">
-              <span class="switch-title" data-i18n="behavior.typing">Simulate typing</span>
-              <span class="switch-hint" data-i18n="behavior.typing.hint">Type text into active window</span>
-            </span>
-          </label>
-          <label class="switch-row compact">
-            <input type="checkbox" id="copyToClipboard" />
-            <span class="switch-text">
-              <span class="switch-title" data-i18n="behavior.clipboard">Copy to clipboard</span>
-              <span class="switch-hint" data-i18n="behavior.clipboard.hint">Copy result to clipboard</span>
-            </span>
-          </label>
-          <label class="switch-row compact">
-            <input type="checkbox" id="useStreaming" checked />
-            <span class="switch-text">
-              <span class="switch-title" data-i18n="behavior.streaming">Realtime text</span>
-              <span class="switch-hint" data-i18n="behavior.streaming.hint">Show text while recording</span>
-            </span>
-          </label>
-        </div>
-      </section>
-
-      <!-- System Section -->
-      <section class="settings-group">
-        <h3 data-i18n="system.title">System</h3>
-        <div class="switches-grid">
-          <label class="switch-row compact">
-            <input type="checkbox" id="autoStart" />
-            <span class="switch-text">
-              <span class="switch-title" data-i18n="system.autostart">Auto-start</span>
-              <span class="switch-hint" data-i18n="system.autostart.hint">Launch on Windows startup</span>
-            </span>
-          </label>
-          <label class="switch-row compact">
-            <input type="checkbox" id="startMinimized" />
-            <span class="switch-text">
-              <span class="switch-title" data-i18n="system.tray">Start minimized</span>
-              <span class="switch-hint" data-i18n="system.tray.hint">Minimize to tray on launch</span>
-            </span>
-          </label>
-          <label class="switch-row compact">
-            <input type="checkbox" id="autoUpdate" checked />
-            <span class="switch-text">
-              <span class="switch-title" data-i18n="system.autoupdate">Auto-update</span>
-              <span class="switch-hint" data-i18n="system.autoupdate.hint">Check for new versions</span>
-            </span>
-          </label>
-        </div>
-        <!-- Language selector -->
-        <label class="language-selector">
-          <span data-i18n="system.language">Interface language</span>
-          <select id="uiLanguage">
-            <option value="en">English</option>
-            <option value="ru">Русский</option>
-          </select>
-        </label>
-      </section>
-
-      <!-- Sticky Actions -->
+      <!-- Sticky Actions (full width) -->
       <div class="actions-sticky">
         <button type="button" id="revertBtn" data-i18n="actions.revert">Revert</button>
         <button type="submit" id="saveBtn" data-i18n="actions.save">Save</button>

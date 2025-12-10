@@ -88,36 +88,102 @@ struct TranscriptEventPayload {
 /// Обрабатывает полученную транскрипцию и выводит текст
 async fn process_transcript(app: &AppHandle, text: String) -> anyhow::Result<()> {
     use tauri::Manager;
+    use tauri_plugin_clipboard_manager::ClipboardExt;
     use crate::core::events::{emit_complete, emit_status, StatusPhase};
     use std::sync::atomic::Ordering;
 
     let state = app.state::<AppState>();
-    let settings = state.current_settings().await;
+    let mut settings = state.current_settings().await;
+
+    // Check if force_translate is set for this session
+    if state.get_force_translate() {
+        settings.auto_translate = true;
+        log::info!("[ElevenLabs Handler] Force translate enabled for this session");
+        state.clear_force_translate();
+    }
+
+    // Store original text before LLM processing for history
+    let original_text = text.clone();
 
     // Применяем LLM обработку если нужно
     let final_text = if settings.requires_llm() {
         log::info!("[ElevenLabs Handler] Applying LLM processing...");
         emit_status(app, StatusPhase::Transcribing, Some("Applying LLM..."));
 
-        match apply_llm_refinement(&settings, &text).await {
+        match apply_llm_refinement(&settings, &original_text).await {
             Ok(refined) => refined,
             Err(e) => {
                 log::error!("[ElevenLabs Handler] LLM processing failed: {}", e);
-                text // Используем оригинальный текст
+                original_text.clone() // Используем оригинальный текст
             }
         }
     } else {
-        text
+        original_text.clone()
     };
 
-    // Выводим текст
-    output_text(app, &settings, &final_text).await?;
-    append_transcript_log(app, "committed", &final_text);
+    let trimmed = final_text.trim().to_string();
+
+    // Copy to clipboard if enabled (ALWAYS, not just when simulate_typing is off)
+    if settings.copy_to_clipboard && !trimmed.is_empty() {
+        if let Err(e) = app.clipboard().write_text(&trimmed) {
+            log::error!("[ElevenLabs Handler] Failed to copy to clipboard: {}", e);
+        } else {
+            log::info!("[ElevenLabs Handler] Text copied to clipboard");
+        }
+    }
+
+    // Выводим текст через эмуляцию ввода если включено
+    if settings.simulate_typing && !trimmed.is_empty() {
+        log::info!("[ElevenLabs Handler] Typing text character by character");
+        let keyboard = state.transcription().keyboard();
+        let text_clone = trimmed.clone();
+
+        if let Err(e) = tauri::async_runtime::spawn_blocking(move || {
+            keyboard.type_text(&text_clone)
+        }).await.map_err(|e| anyhow::anyhow!("Task join error: {}", e))? {
+            log::error!("[ElevenLabs Handler] Failed to type text: {}", e);
+        }
+    }
+
+    append_transcript_log(app, "committed", &trimmed);
+
+    // Save to history (only non-empty results)
+    if !trimmed.is_empty() {
+        let translated_text = if settings.auto_translate && trimmed != original_text {
+            Some(trimmed.clone())
+        } else {
+            None
+        };
+
+        // Determine LLM provider if LLM was used
+        let llm_provider_used = if settings.requires_llm() {
+            Some(format!("{:?}", settings.llm_provider).to_lowercase())
+        } else {
+            None
+        };
+
+        // Check if custom instructions were used
+        let custom_instructions_used = settings.use_custom_instructions
+            && !settings.custom_instructions.trim().is_empty();
+
+        let _ = state.add_history_entry(
+            if translated_text.is_some() { original_text } else { trimmed.clone() },
+            translated_text,
+            None, // source_language - TODO: detect from transcription
+            if settings.auto_translate { Some(settings.target_language.clone()) } else { None },
+            Some("elevenlabs".to_string()), // transcription_provider
+            llm_provider_used,
+            custom_instructions_used,
+        ).await;
+        log::info!("[ElevenLabs Handler] Added to history");
+    }
 
     // Сбрасываем флаг транскрипции
     state.is_transcribing().store(false, Ordering::SeqCst);
 
-    emit_complete(app, &final_text);
+    // Emit success status BEFORE complete (for overlay to show final text)
+    emit_status(app, StatusPhase::Success, None);
+    emit_complete(app, &trimmed);
     emit_status(app, StatusPhase::Idle, Some("Ready for next transcription"));
 
     Ok(())
@@ -135,7 +201,14 @@ async fn apply_llm_refinement(settings: &AppSettings, text: &str) -> anyhow::Res
     };
 
     if llm_key.is_empty() {
-        return Err(anyhow::anyhow!("LLM API key is empty"));
+        let provider_name = match settings.llm_provider {
+            LLMProvider::OpenAI => "OpenAI",
+            LLMProvider::Groq => "Groq",
+        };
+        return Err(anyhow::anyhow!(
+            "{} API key is required for translation, custom instructions, or vocabulary correction",
+            provider_name
+        ));
     }
 
     let custom_instructions = if settings.use_custom_instructions {
@@ -149,12 +222,19 @@ async fn apply_llm_refinement(settings: &AppSettings, text: &str) -> anyhow::Res
         None
     };
 
+    let vocabulary = if settings.use_vocabulary {
+        settings.custom_vocabulary.clone()
+    } else {
+        Vec::new()
+    };
+
     let request = RefinementRequest {
         api_key: llm_key,
         model: settings.model.clone(),
         auto_translate: settings.auto_translate,
         target_language: settings.target_language.clone(),
         custom_instructions,
+        vocabulary,
     };
 
     match settings.llm_provider {
@@ -169,42 +249,3 @@ async fn apply_llm_refinement(settings: &AppSettings, text: &str) -> anyhow::Res
     }
 }
 
-/// Выводит текст через Enigo (simulate_typing) или Arboard (paste)
-async fn output_text(
-    app: &AppHandle,
-    settings: &AppSettings,
-    text: &str,
-) -> anyhow::Result<()> {
-    use tauri::Manager;
-    use tauri_plugin_clipboard_manager::ClipboardExt;
-
-    let state = app.state::<AppState>();
-
-    if settings.simulate_typing {
-        // Посимвольная печать через Enigo
-        log::info!("[ElevenLabs Handler] Typing text character by character");
-        let keyboard = state.transcription().keyboard();
-        let text_clone = text.to_string();
-
-        // Run in blocking task and wait for completion
-        if let Err(e) = tauri::async_runtime::spawn_blocking(move || {
-            keyboard.type_text(&text_clone)
-        }).await.map_err(|e| anyhow::anyhow!("Task join error: {}", e))? {
-            log::error!("[ElevenLabs Handler] Failed to type text: {}", e);
-        }
-    } else {
-        // Вставка через буфер обмена
-        log::info!("[ElevenLabs Handler] Pasting text via clipboard");
-        app.clipboard().write_text(text)?;
-
-        // Эмулируем Ctrl+V и ждём завершения
-        let keyboard = state.transcription().keyboard();
-        if let Err(e) = tauri::async_runtime::spawn_blocking(move || {
-            keyboard.paste()
-        }).await.map_err(|e| anyhow::anyhow!("Task join error: {}", e))? {
-            log::error!("[ElevenLabs Handler] Failed to paste: {}", e);
-        }
-    }
-
-    Ok(())
-}

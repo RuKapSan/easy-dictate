@@ -42,6 +42,7 @@ impl KeyboardController {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn paste(&self) -> Result<()> {
         let mut guard = self
             .inner
