@@ -52,11 +52,17 @@ pub fn run() {
             let state = AppState::new(store, initial.clone())?;
             app.manage(state);
 
-            // Check if app is starting with the system (autostart)
-            let is_autostart = std::env::args().any(|arg| arg == "--autostart" || arg == "--minimized");
+            // Check if app should start minimized:
+            // 1. Command line args --autostart or --minimized (for autostart plugin)
+            // 2. Setting: start_minimized is true
+            let has_autostart_arg = std::env::args().any(|arg| arg == "--autostart" || arg == "--minimized");
+            let should_start_minimized = has_autostart_arg || initial.start_minimized;
+
+            log::info!("[Setup] Start minimized: {} (args: {}, setting: {})",
+                       should_start_minimized, has_autostart_arg, initial.start_minimized);
 
             if let Some(window) = handle.get_webview_window("main") {
-                if !is_autostart {
+                if !should_start_minimized {
                     if let Err(e) = window.show() {
                         log::warn!("[Setup] Failed to show main window: {}", e);
                     }
@@ -67,10 +73,11 @@ pub fn run() {
                         log::warn!("[Setup] Failed to set focus on main window: {}", e);
                     }
                 } else {
-                    // Keep window hidden when starting with the system
+                    // Keep window hidden when starting minimized
                     if let Err(e) = window.hide() {
                         log::warn!("[Setup] Failed to hide main window: {}", e);
                     }
+                    log::info!("[Setup] Window hidden (start minimized enabled)");
                 }
             }
             
@@ -174,6 +181,10 @@ pub fn run() {
             core::commands::elevenlabs_streaming_send_chunk,
             core::commands::elevenlabs_streaming_is_connected,
             core::commands::show_overlay_no_focus,
+            // History commands
+            core::commands::get_history,
+            core::commands::clear_history,
+            core::commands::delete_history_entry,
             // Test mode commands
             core::commands::inject_test_audio,
             core::commands::get_test_state,

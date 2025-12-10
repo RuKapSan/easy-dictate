@@ -186,6 +186,11 @@ pub fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
                     });
                 }
 
+                // Save to history (only non-empty results)
+                if !trimmed.is_empty() {
+                    let _ = state.add_history_entry(trimmed.clone(), None).await;
+                }
+
                 emit_status(&app_handle, StatusPhase::Success, None);
                 emit_complete(&app_handle, &trimmed);
             }

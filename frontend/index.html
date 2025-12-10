@@ -68,17 +68,16 @@
         <label class="hotkey-label">
           Горячая клавиша
           <div class="hotkey-row">
-            <button type="button" id="startHotkeyCapture">Записать</button>
-            <span id="hotkeyDisplay" data-placeholder="Не задана" data-empty="true">Не задана</span>
+            <span id="hotkeyDisplay" class="hotkey-field" tabindex="0" data-placeholder="Кликните для записи" data-empty="true">Кликните для записи</span>
+            <button type="button" class="hotkey-clear" id="hotkeyClear" title="Сбросить">&times;</button>
             <input type="hidden" id="hotkey" />
           </div>
-          <small class="hotkey-hint">Нажмите «Записать», затем удерживайте нужные клавиши</small>
         </label>
         <label class="hotkey-label">
           Горячая клавиша для записи с переводом
           <div class="hotkey-row">
-            <button type="button" id="startTranslateHotkeyCapture">Записать</button>
-            <span id="translateHotkeyDisplay" data-placeholder="Не задана" data-empty="true">Не задана</span>
+            <span id="translateHotkeyDisplay" class="hotkey-field" tabindex="0" data-placeholder="Кликните для записи" data-empty="true">Кликните для записи</span>
+            <button type="button" class="hotkey-clear" id="translateHotkeyClear" title="Сбросить">&times;</button>
             <input type="hidden" id="translateHotkey" />
           </div>
           <small class="hotkey-hint">Эта клавиша всегда переводит результат</small>
@@ -86,8 +85,8 @@
         <label class="hotkey-label">
           Горячая клавиша для переключения перевода
           <div class="hotkey-row">
-            <button type="button" id="startToggleTranslateHotkeyCapture">Записать</button>
-            <span id="toggleTranslateHotkeyDisplay" data-placeholder="Не задана" data-empty="true">Не задана</span>
+            <span id="toggleTranslateHotkeyDisplay" class="hotkey-field" tabindex="0" data-placeholder="Кликните для записи" data-empty="true">Кликните для записи</span>
+            <button type="button" class="hotkey-clear" id="toggleTranslateHotkeyClear" title="Сбросить">&times;</button>
             <input type="hidden" id="toggleTranslateHotkey" />
           </div>
           <small class="hotkey-hint">Переключает настройку «Переводить результат»</small>
@@ -103,6 +102,10 @@
         <label class="switch-row">
           <input type="checkbox" id="autoStart" />
           <span>Автозапуск с системой</span>
+        </label>
+        <label class="switch-row">
+          <input type="checkbox" id="startMinimized" />
+          <span>Запускать в трее</span>
         </label>
         <label class="switch-row">
           <input type="checkbox" id="autoUpdate" checked />
@@ -148,6 +151,21 @@
           <button type="submit" id="saveBtn">Сохранить</button>
         </div>
       </form>
+    </section>
+
+    <section class="card" id="historyCard">
+      <div class="section-header">
+        <h2>История</h2>
+        <button type="button" class="clear-history-btn" id="clearHistoryBtn" title="Очистить историю">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+      </div>
+      <div id="historyList" class="history-list">
+        <p class="history-empty">Нет записей</p>
+      </div>
     </section>
 
     <footer>

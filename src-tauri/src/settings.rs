@@ -69,6 +69,7 @@ pub struct AppSettings {
     pub simulate_typing: bool,
     pub copy_to_clipboard: bool,
     pub auto_start: bool,
+    pub start_minimized: bool,
     pub auto_update: bool,
     pub use_streaming: bool,
     pub auto_translate: bool,
@@ -92,6 +93,7 @@ impl Default for AppSettings {
             simulate_typing: true,
             copy_to_clipboard: true,
             auto_start: false,
+            start_minimized: false,
             auto_update: true,
             use_streaming: true,
             auto_translate: false,
@@ -336,6 +338,7 @@ mod tests {
         assert!(settings.simulate_typing);
         assert!(settings.copy_to_clipboard);
         assert!(!settings.auto_start);
+        assert!(!settings.start_minimized);
         assert!(settings.auto_update);
     }
 

@@ -376,6 +376,31 @@ pub async fn elevenlabs_streaming_is_connected(
 }
 
 // ============================================================================
+// History Commands
+// ============================================================================
+
+use super::state::HistoryEntry;
+
+#[tauri::command]
+pub async fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
+    Ok(state.get_history().await)
+}
+
+#[tauri::command]
+pub async fn clear_history(state: State<'_, AppState>) -> Result<(), String> {
+    state.clear_history().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_history_entry(
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<bool, String> {
+    Ok(state.delete_history_entry(id).await)
+}
+
+// ============================================================================
 // Test Mode Commands (for E2E testing without microphone)
 // ============================================================================
 

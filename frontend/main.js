@@ -49,16 +49,17 @@ const elevenlabsApiKeyLabel = document.getElementById("elevenlabs-api-key-label"
 const modelSelect = document.getElementById("model");
 const hotkeyHiddenInput = document.getElementById("hotkey");
 const hotkeyDisplay = document.getElementById("hotkeyDisplay");
-const hotkeyRecordBtn = document.getElementById("startHotkeyCapture");
+const hotkeyClearBtn = document.getElementById("hotkeyClear");
 const translateHotkeyHiddenInput = document.getElementById("translateHotkey");
 const translateHotkeyDisplay = document.getElementById("translateHotkeyDisplay");
-const translateHotkeyRecordBtn = document.getElementById("startTranslateHotkeyCapture");
+const translateHotkeyClearBtn = document.getElementById("translateHotkeyClear");
 const toggleTranslateHotkeyHiddenInput = document.getElementById("toggleTranslateHotkey");
 const toggleTranslateHotkeyDisplay = document.getElementById("toggleTranslateHotkeyDisplay");
-const toggleTranslateHotkeyRecordBtn = document.getElementById("startToggleTranslateHotkeyCapture");
+const toggleTranslateHotkeyClearBtn = document.getElementById("toggleTranslateHotkeyClear");
 const simulateTypingInput = document.getElementById("simulateTyping");
 const copyToClipboardInput = document.getElementById("copyToClipboard");
 const autoStartInput = document.getElementById("autoStart");
+const startMinimizedInput = document.getElementById("startMinimized");
 const autoUpdateInput = document.getElementById("autoUpdate");
 const useStreamingInput = document.getElementById("useStreaming");
 const autoTranslateInput = document.getElementById("autoTranslate");
@@ -203,19 +204,19 @@ function getHotkeyElements(target) {
     return {
       hidden: translateHotkeyHiddenInput,
       display: translateHotkeyDisplay,
-      button: translateHotkeyRecordBtn
+      clearBtn: translateHotkeyClearBtn
     };
   } else if (target === 'toggle') {
     return {
       hidden: toggleTranslateHotkeyHiddenInput,
       display: toggleTranslateHotkeyDisplay,
-      button: toggleTranslateHotkeyRecordBtn
+      clearBtn: toggleTranslateHotkeyClearBtn
     };
   } else {
     return {
       hidden: hotkeyHiddenInput,
       display: hotkeyDisplay,
-      button: hotkeyRecordBtn
+      clearBtn: hotkeyClearBtn
     };
   }
 }
@@ -229,7 +230,7 @@ function renderHotkey(value, target = currentCapturingTarget || 'main') {
   }
   if (!elements.display) return;
   if (!normalized) {
-    elements.display.textContent = elements.display.dataset.placeholder ?? "";
+    elements.display.textContent = "Кликните для записи";
     elements.display.dataset.empty = "true";
   } else {
     elements.display.textContent = normalized;
@@ -240,13 +241,12 @@ function renderHotkey(value, target = currentCapturingTarget || 'main') {
 function applyHotkeyRecordingStyles(active, previewText, target = currentCapturingTarget || 'main') {
   const elements = getHotkeyElements(target);
 
-  if (elements.button) {
-    elements.button.classList.toggle("recording", active);
-    elements.button.textContent = active ? "Слушаю..." : "Записать";
-  }
-  if (active && elements.display) {
-    elements.display.textContent = previewText ?? "Удерживайте клавиши";
-    elements.display.dataset.empty = "false";
+  if (elements.display) {
+    elements.display.classList.toggle("capturing", active);
+    if (active) {
+      elements.display.textContent = previewText ?? "Нажмите клавиши...";
+      elements.display.dataset.empty = "false";
+    }
   }
 }
 
@@ -484,6 +484,7 @@ async function loadSettings() {
     simulateTypingInput.checked = Boolean(settings.simulate_typing);
     copyToClipboardInput.checked = Boolean(settings.copy_to_clipboard);
     autoStartInput.checked = Boolean(settings.auto_start);
+    startMinimizedInput.checked = Boolean(settings.start_minimized);
     autoUpdateInput.checked = Boolean(settings.auto_update ?? true); // Default to true
     useStreamingInput.checked = Boolean(settings.use_streaming);
     autoTranslateInput.checked = Boolean(settings.auto_translate);
@@ -524,6 +525,7 @@ function currentSettings() {
     simulate_typing: simulateTypingInput.checked,
     copy_to_clipboard: copyToClipboardInput.checked,
     auto_start: autoStartInput.checked,
+    start_minimized: startMinimizedInput.checked,
     auto_update: autoUpdateInput.checked,
     use_streaming: useStreamingInput.checked,
     auto_translate: autoTranslateInput.checked,
@@ -577,6 +579,7 @@ revertBtn?.addEventListener("click", () => {
   simulateTypingInput.checked = Boolean(initialSettings.simulate_typing);
   copyToClipboardInput.checked = Boolean(initialSettings.copy_to_clipboard);
   autoStartInput.checked = Boolean(initialSettings.auto_start);
+  startMinimizedInput.checked = Boolean(initialSettings.start_minimized);
   useStreamingInput.checked = Boolean(initialSettings.use_streaming);
   autoTranslateInput.checked = Boolean(initialSettings.auto_translate);
   targetLanguageSelect.value = initialSettings.target_language ?? "русский";
@@ -591,8 +594,9 @@ revertBtn?.addEventListener("click", () => {
   showToast("Изменения отменены");
 });
 
-hotkeyRecordBtn?.addEventListener("click", () => {
-  dbg("Record button clicked");
+// Click on hotkey field to start capture
+hotkeyDisplay?.addEventListener("click", () => {
+  dbg("Hotkey field clicked");
   if (isCapturingHotkey) {
     cancelHotkeyCapture();
   } else {
@@ -600,8 +604,8 @@ hotkeyRecordBtn?.addEventListener("click", () => {
   }
 });
 
-translateHotkeyRecordBtn?.addEventListener("click", () => {
-  dbg("Translate hotkey record button clicked");
+translateHotkeyDisplay?.addEventListener("click", () => {
+  dbg("Translate hotkey field clicked");
   if (isCapturingHotkey) {
     cancelHotkeyCapture();
   } else {
@@ -609,13 +613,38 @@ translateHotkeyRecordBtn?.addEventListener("click", () => {
   }
 });
 
-toggleTranslateHotkeyRecordBtn?.addEventListener("click", () => {
-  dbg("Toggle translate hotkey record button clicked");
+toggleTranslateHotkeyDisplay?.addEventListener("click", () => {
+  dbg("Toggle translate hotkey field clicked");
   if (isCapturingHotkey) {
     cancelHotkeyCapture();
   } else {
     beginHotkeyCapture('toggle');
   }
+});
+
+// Clear hotkey buttons
+function clearHotkey(target) {
+  const elements = getHotkeyElements(target);
+  if (elements.hidden) {
+    elements.hidden.value = "";
+  }
+  renderHotkey("", target);
+  markFormDirty();
+}
+
+hotkeyClearBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  clearHotkey('main');
+});
+
+translateHotkeyClearBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  clearHotkey('translate');
+});
+
+toggleTranslateHotkeyClearBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  clearHotkey('toggle');
 });
 
 autoTranslateInput?.addEventListener("change", () => {
@@ -675,10 +704,13 @@ window.addEventListener("keyup", (event) => {
 window.addEventListener("mousedown", (event) => {
   dbg(`mousedown button=${event.button}`);
   if (!isCapturingHotkey) return;
-  // Don't capture if clicking any of the record buttons
-  if (event.target === hotkeyRecordBtn ||
-      event.target === translateHotkeyRecordBtn ||
-      event.target === toggleTranslateHotkeyRecordBtn) return;
+  // Don't capture if clicking on hotkey fields or clear buttons
+  if (event.target === hotkeyDisplay ||
+      event.target === translateHotkeyDisplay ||
+      event.target === toggleTranslateHotkeyDisplay ||
+      event.target === hotkeyClearBtn ||
+      event.target === translateHotkeyClearBtn ||
+      event.target === toggleTranslateHotkeyClearBtn) return;
   event.preventDefault();
   event.stopPropagation();
   const binding = formatMouseHotkey(event);
@@ -770,6 +802,118 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
       showToast("Готово", "success");
       setStatus("success", "Обработка завершена");
+      // Refresh history after transcription completes
+      loadHistory();
     });
   }
+
+  // Load history on startup
+  await loadHistory();
 });
+
+// ============================================================================
+// History Management
+// ============================================================================
+
+const historyListEl = document.getElementById("historyList");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+
+async function loadHistory() {
+  if (!invoke || !historyListEl) return;
+
+  try {
+    const history = await invoke("get_history");
+    renderHistory(history);
+  } catch (err) {
+    console.error("[History] Failed to load:", err);
+  }
+}
+
+function renderHistory(entries) {
+  if (!historyListEl) return;
+
+  if (!entries || entries.length === 0) {
+    historyListEl.innerHTML = '<p class="history-empty">Нет записей</p>';
+    return;
+  }
+
+  historyListEl.innerHTML = entries.map(entry => {
+    const time = formatHistoryTime(entry.timestamp);
+    const text = escapeHtml(entry.original_text);
+    return `
+      <div class="history-entry" data-id="${entry.id}">
+        <div class="history-entry-content">
+          <p class="history-entry-text">${text}</p>
+          <span class="history-entry-time">${time}</span>
+        </div>
+        <button type="button" class="history-entry-delete" title="Удалить" data-id="${entry.id}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  // Add delete handlers
+  historyListEl.querySelectorAll('.history-entry-delete').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = parseInt(btn.dataset.id, 10);
+      await deleteHistoryEntry(id);
+    });
+  });
+}
+
+function formatHistoryTime(timestamp) {
+  try {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+
+    if (isToday) {
+      return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return '';
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+async function deleteHistoryEntry(id) {
+  if (!invoke) return;
+
+  try {
+    await invoke("delete_history_entry", { id });
+    await loadHistory();
+  } catch (err) {
+    console.error("[History] Failed to delete entry:", err);
+    showToast("Не удалось удалить запись", "error");
+  }
+}
+
+async function clearAllHistory() {
+  if (!invoke) return;
+
+  try {
+    await invoke("clear_history");
+    await loadHistory();
+    showToast("История очищена", "success");
+  } catch (err) {
+    console.error("[History] Failed to clear:", err);
+    showToast("Не удалось очистить историю", "error");
+  }
+}
+
+clearHistoryBtn?.addEventListener("click", clearAllHistory);

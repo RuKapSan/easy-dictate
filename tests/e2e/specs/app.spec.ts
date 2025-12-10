@@ -102,23 +102,32 @@ describe('Easy Dictate Application', () => {
     it('should have new hotkey UI elements', async () => {
       logger.info('Checking new hotkey UI elements');
 
-      // Verify translate hotkey elements exist
-      const translateHotkeyBtn = await browser.$('#startTranslateHotkeyCapture');
-      expect(await translateHotkeyBtn.isExisting()).toBe(true);
-      logger.info('Translate hotkey button found');
+      // Verify main hotkey field (click-to-capture)
+      const hotkeyDisplay = await browser.$('#hotkeyDisplay');
+      expect(await hotkeyDisplay.isExisting()).toBe(true);
+      logger.info('Main hotkey display found');
 
+      const hotkeyClear = await browser.$('#hotkeyClear');
+      expect(await hotkeyClear.isExisting()).toBe(true);
+      logger.info('Main hotkey clear button found');
+
+      // Verify translate hotkey elements exist
       const translateHotkeyDisplay = await browser.$('#translateHotkeyDisplay');
       expect(await translateHotkeyDisplay.isExisting()).toBe(true);
       logger.info('Translate hotkey display found');
 
-      // Verify toggle translate hotkey elements exist
-      const toggleTranslateHotkeyBtn = await browser.$('#startToggleTranslateHotkeyCapture');
-      expect(await toggleTranslateHotkeyBtn.isExisting()).toBe(true);
-      logger.info('Toggle translate hotkey button found');
+      const translateHotkeyClear = await browser.$('#translateHotkeyClear');
+      expect(await translateHotkeyClear.isExisting()).toBe(true);
+      logger.info('Translate hotkey clear button found');
 
+      // Verify toggle translate hotkey elements exist
       const toggleTranslateHotkeyDisplay = await browser.$('#toggleTranslateHotkeyDisplay');
       expect(await toggleTranslateHotkeyDisplay.isExisting()).toBe(true);
       logger.info('Toggle translate hotkey display found');
+
+      const toggleTranslateHotkeyClear = await browser.$('#toggleTranslateHotkeyClear');
+      expect(await toggleTranslateHotkeyClear.isExisting()).toBe(true);
+      logger.info('Toggle translate hotkey clear button found');
 
       await screenshots.capture(browser, 'new_hotkey_elements_verified');
     });
@@ -291,15 +300,15 @@ describe('Easy Dictate Application', () => {
   });
 
   describe('Hotkey Recording UI', () => {
-    it('should enter hotkey recording mode', async () => {
-      const recordBtn = await browser.$('#startHotkeyCapture');
-      await recordBtn.click();
+    it('should enter hotkey recording mode (click-to-capture)', async () => {
+      const hotkeyField = await browser.$('#hotkeyDisplay');
+      await hotkeyField.click();
 
-      // Wait for recording state
+      // Wait for recording state (field gets 'capturing' class)
       await browser.waitUntil(
         async () => {
-          const text = await recordBtn.getText();
-          return text.toLowerCase().includes('слушаю');
+          const className = await hotkeyField.getAttribute('class');
+          return className?.includes('capturing');
         },
         { timeout: 2000, timeoutMsg: 'Did not enter recording mode' }
       );
@@ -312,23 +321,23 @@ describe('Easy Dictate Application', () => {
       // Wait for exit
       await browser.waitUntil(
         async () => {
-          const text = await recordBtn.getText();
-          return !text.toLowerCase().includes('слушаю');
+          const className = await hotkeyField.getAttribute('class');
+          return !className?.includes('capturing');
         },
         { timeout: 2000, timeoutMsg: 'Did not exit recording mode' }
       );
     });
 
     it('should capture keyboard hotkey in UI', async () => {
-      const recordBtn = await browser.$('#startHotkeyCapture');
-      const hotkeyDisplay = await browser.$('#hotkeyDisplay');
+      const hotkeyField = await browser.$('#hotkeyDisplay');
 
-      await recordBtn.click();
+      // Click field to start capture
+      await hotkeyField.click();
 
       await browser.waitUntil(
         async () => {
-          const text = await recordBtn.getText();
-          return text.toLowerCase().includes('слушаю');
+          const className = await hotkeyField.getAttribute('class');
+          return className?.includes('capturing');
         },
         { timeout: 2000 }
       );
@@ -336,19 +345,56 @@ describe('Easy Dictate Application', () => {
       // Press Ctrl+Shift+A (this is DOM event, not global)
       await browser.keys(['Control', 'Shift', 'a']);
 
-      // Wait for capture
+      // Wait for capture (field loses 'capturing' class)
       await browser.waitUntil(
         async () => {
-          const text = await recordBtn.getText();
-          return !text.toLowerCase().includes('слушаю');
+          const className = await hotkeyField.getAttribute('class');
+          return !className?.includes('capturing');
         },
         { timeout: 3000 }
       );
 
-      const captured = await hotkeyDisplay.getText();
+      const captured = await hotkeyField.getText();
       logger.info('Captured hotkey', { captured });
 
       await screenshots.capture(browser, 'hotkey_captured');
+    });
+
+    it('should clear hotkey when clear button clicked', async () => {
+      const hotkeyField = await browser.$('#hotkeyDisplay');
+      const hotkeyClear = await browser.$('#hotkeyClear');
+
+      // Get initial value
+      const initialText = await hotkeyField.getText();
+      logger.info('Initial hotkey', { initialText });
+
+      // If there's no hotkey set, set one first
+      if (initialText === 'Кликните для записи') {
+        await hotkeyField.click();
+        await browser.waitUntil(async () => {
+          const className = await hotkeyField.getAttribute('class');
+          return className?.includes('capturing');
+        }, { timeout: 2000 });
+        await browser.keys(['Control', 'Shift', 'x']);
+        await browser.waitUntil(async () => {
+          const className = await hotkeyField.getAttribute('class');
+          return !className?.includes('capturing');
+        }, { timeout: 2000 });
+      }
+
+      // Click clear button
+      await hotkeyClear.click();
+
+      // Verify field shows placeholder
+      await browser.waitUntil(
+        async () => {
+          const text = await hotkeyField.getText();
+          return text === 'Кликните для записи';
+        },
+        { timeout: 2000, timeoutMsg: 'Hotkey was not cleared' }
+      );
+
+      await screenshots.capture(browser, 'hotkey_cleared');
     });
   });
 
