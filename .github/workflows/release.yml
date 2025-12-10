@@ -273,14 +273,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find all installer files
-          INSTALLERS=$(find artifacts -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" \))
+          # Find all installer files and handle spaces in filenames
           echo "Found installers:"
-          echo "$INSTALLERS"
+          find artifacts -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" \) -print
 
-          # Create release with all files
+          # Create release first
           gh release create "${{ github.ref_name }}" \
             --title "Easy Dictate v${{ steps.version.outputs.version }}" \
             --notes-file CHANGELOG.md \
-            latest.json \
-            $INSTALLERS
+            latest.json
+
+          # Upload each file separately to handle spaces
+          find artifacts -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" \) -print0 | \
+            while IFS= read -r -d '' file; do
+              echo "Uploading: $file"
+              gh release upload "${{ github.ref_name }}" "$file"
+            done
