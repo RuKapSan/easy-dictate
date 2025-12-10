@@ -6,6 +6,7 @@ use super::state::AppState;
 pub const EVENT_STATUS: &str = "transcription://status";
 pub const EVENT_PARTIAL: &str = "transcription://partial";
 pub const EVENT_COMPLETE: &str = "transcription://complete";
+pub const EVENT_SETTINGS_CHANGED: &str = "settings://changed";
 
 #[derive(Clone, Copy, Debug)]
 pub enum StatusPhase {
@@ -96,4 +97,22 @@ pub fn emit_complete(app: &AppHandle, text: &str) {
 
 pub fn emit_error(app: &AppHandle, message: &str) {
     emit_status(app, StatusPhase::Error, Some(message));
+}
+
+#[derive(Clone, Serialize)]
+pub struct SettingsChangedPayload {
+    pub auto_translate: bool,
+    pub target_language: String,
+}
+
+pub fn emit_settings_changed(app: &AppHandle, auto_translate: bool, target_language: &str) {
+    if let Err(e) = app.emit(
+        EVENT_SETTINGS_CHANGED,
+        SettingsChangedPayload {
+            auto_translate,
+            target_language: target_language.to_string(),
+        },
+    ) {
+        log::error!("[Events] Failed to emit settings-changed event: {}", e);
+    }
 }

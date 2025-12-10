@@ -1,0 +1,9 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-toggle-auto-translate",
+      "description": "Allow calling toggle_auto_translate",
+      "commands": { "allow": ["toggle_auto_translate"], "deny": [] }
+    }
+  ]
+}

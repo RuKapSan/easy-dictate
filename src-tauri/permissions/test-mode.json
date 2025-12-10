@@ -1,0 +1,29 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-show-main-window",
+      "description": "Allow showing main window for E2E testing",
+      "commands": { "allow": ["show_main_window"], "deny": [] }
+    },
+    {
+      "identifier": "allow-inject-test-audio",
+      "description": "Allow injecting test audio for E2E testing",
+      "commands": { "allow": ["inject_test_audio"], "deny": [] }
+    },
+    {
+      "identifier": "allow-get-test-state",
+      "description": "Allow getting test state for E2E testing",
+      "commands": { "allow": ["get_test_state"], "deny": [] }
+    },
+    {
+      "identifier": "allow-simulate-hotkey-press",
+      "description": "Allow simulating hotkey press for E2E testing",
+      "commands": { "allow": ["simulate_hotkey_press"], "deny": [] }
+    },
+    {
+      "identifier": "allow-simulate-hotkey-release",
+      "description": "Allow simulating hotkey release for E2E testing",
+      "commands": { "allow": ["simulate_hotkey_release"], "deny": [] }
+    }
+  ]
+}

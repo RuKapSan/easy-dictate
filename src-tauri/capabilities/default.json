@@ -27,6 +27,7 @@
     "allow-settings",
     "allow-frontend-log",
     "allow-ping",
+    "allow-toggle-auto-translate",
     "allow-elevenlabs-streaming-connect",
     "allow-elevenlabs-streaming-disconnect",
     "allow-elevenlabs-streaming-open-gate",
@@ -34,6 +35,14 @@
     "allow-elevenlabs-streaming-send-chunk",
     "allow-elevenlabs-streaming-is-connected",
     "allow-show-overlay-no-focus",
-    "core:window:allow-hide"
+    "allow-get-history",
+    "allow-clear-history",
+    "allow-delete-history-entry",
+    "core:window:allow-hide",
+    "allow-show-main-window",
+    "allow-inject-test-audio",
+    "allow-get-test-state",
+    "allow-simulate-hotkey-press",
+    "allow-simulate-hotkey-release"
   ]
 }

@@ -1,0 +1,151 @@
+name: Build & E2E Tests
+
+on:
+  push:
+    branches: [ master, feat/e2e-tests ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            run-e2e: true
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            run-e2e: false
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            run-e2e: false
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            run-e2e: false
+
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cache Cargo binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-bins-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bins-
+
+      - name: Cache E2E node_modules
+        if: matrix.platform.run-e2e
+        uses: actions/cache@v4
+        with:
+          path: tests/e2e/node_modules
+          key: ${{ runner.os }}-e2e-node-${{ hashFiles('tests/e2e/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-node-
+
+      - name: Install E2E test dependencies
+        if: matrix.platform.run-e2e
+        working-directory: tests/e2e
+        run: npm ci
+
+      - name: Install Tauri CLI
+        shell: bash
+        run: |
+          if ! command -v cargo-tauri &> /dev/null; then
+            cargo install tauri-cli --locked
+          else
+            echo "tauri-cli already installed"
+          fi
+
+      - name: Install tauri-driver
+        if: matrix.platform.run-e2e
+        shell: bash
+        run: |
+          if ! command -v tauri-driver &> /dev/null; then
+            cargo install tauri-driver --locked
+          else
+            echo "tauri-driver already installed"
+          fi
+
+      - name: Build Tauri app (release)
+        working-directory: src-tauri
+        run: cargo tauri build
+
+      - name: Run E2E tests
+        if: matrix.platform.run-e2e
+        working-directory: tests/e2e
+        run: npm test
+        env:
+          CI: true
+
+      - name: Upload E2E screenshots
+        if: matrix.platform.run-e2e && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots-${{ matrix.platform.target }}
+          path: tests/e2e/screenshots/
+          retention-days: 7
+
+      - name: Upload E2E videos
+        if: matrix.platform.run-e2e && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-videos-${{ matrix.platform.target }}
+          path: tests/e2e/videos/
+          retention-days: 7
+
+      - name: Upload E2E logs
+        if: matrix.platform.run-e2e && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-${{ matrix.platform.target }}
+          path: tests/e2e/artifacts/logs/
+          retention-days: 7
+
+      - name: Upload test reports
+        if: matrix.platform.run-e2e && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.platform.target }}
+          path: tests/e2e/logs/
+          retention-days: 7
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform.target }}
+          path: |
+            src-tauri/target/release/bundle/
+            src-tauri/target/release/*.exe
+            src-tauri/target/release/*.app
+            src-tauri/target/release/*.AppImage
+            src-tauri/target/release/*.deb
+          retention-days: 7

@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use tauri::{Manager, RunEvent};
 use tauri_plugin_log::{Target, TargetKind};
+use tauri_plugin_updater::UpdaterExt;
 
 mod audio;
 mod audio_stream;
@@ -16,7 +17,7 @@ mod settings;
 
 use core::{
     commands,
-    events::{emit_status, StatusPhase},
+    events::{emit_error, emit_status, StatusPhase},
     hotkey,
     state::AppState,
     tray,
@@ -38,6 +39,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle();
 
@@ -50,11 +52,17 @@ pub fn run() {
             let state = AppState::new(store, initial.clone())?;
             app.manage(state);
 
-            // Check if app is starting with the system (autostart)
-            let is_autostart = std::env::args().any(|arg| arg == "--autostart" || arg == "--minimized");
+            // Check if app should start minimized:
+            // 1. Command line args --autostart or --minimized (for autostart plugin)
+            // 2. Setting: start_minimized is true
+            let has_autostart_arg = std::env::args().any(|arg| arg == "--autostart" || arg == "--minimized");
+            let should_start_minimized = has_autostart_arg || initial.start_minimized;
+
+            log::info!("[Setup] Start minimized: {} (args: {}, setting: {})",
+                       should_start_minimized, has_autostart_arg, initial.start_minimized);
 
             if let Some(window) = handle.get_webview_window("main") {
-                if !is_autostart {
+                if !should_start_minimized {
                     if let Err(e) = window.show() {
                         log::warn!("[Setup] Failed to show main window: {}", e);
                     }
@@ -65,10 +73,11 @@ pub fn run() {
                         log::warn!("[Setup] Failed to set focus on main window: {}", e);
                     }
                 } else {
-                    // Keep window hidden when starting with the system
+                    // Keep window hidden when starting minimized
                     if let Err(e) = window.hide() {
                         log::warn!("[Setup] Failed to hide main window: {}", e);
                     }
+                    log::info!("[Setup] Window hidden (start minimized enabled)");
                 }
             }
             
@@ -82,7 +91,13 @@ pub fn run() {
             if let Err(e) = commands::apply_autostart(handle, initial.auto_start) {
                 log::warn!("[Setup] Failed to apply autostart setting: {}", e);
             }
-            hotkey::rebind_hotkey(handle, &initial)?;
+            // Handle hotkey registration failure gracefully (e.g., when another instance is running)
+            // This allows the app to start but won't have hotkey functionality
+            if let Err(e) = hotkey::rebind_hotkey(handle, &initial) {
+                log::warn!("[Setup] Failed to register hotkey (another instance may be running): {}", e);
+                // Emit an error to let the user know
+                emit_error(handle, &format!("Hotkey registration failed: {}. Close other instances and restart.", e));
+            }
             emit_status(handle, StatusPhase::Idle, None);
 
             let status_item = tray::install_tray(handle)?;
@@ -99,6 +114,42 @@ pub fn run() {
             // Log where file logs are stored
             if let Ok(log_dir) = resolver.app_log_dir() {
                 log::info!("[Log] File logging enabled: {}", log_dir.join("logs.log").display());
+            }
+
+            // Check for updates on app start (background task) - if enabled in settings
+            if initial.auto_update {
+                let update_handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    log::info!("[Updater] Checking for updates...");
+                    match update_handle.updater_builder().build() {
+                    Ok(updater) => match updater.check().await {
+                        Ok(Some(update)) => {
+                            log::info!("[Updater] Update available: {} -> {}", update.current_version, update.version);
+                            if let Some(date) = &update.date {
+                                log::info!("[Updater] Update date: {}", date);
+                            }
+
+                            // Auto-download and install the update
+                            match update.download_and_install(|chunk, total| {
+                                log::debug!("[Updater] Downloaded {} of {} bytes", chunk, total.unwrap_or(0));
+                            }, || {
+                                log::info!("[Updater] Download finished, installing...");
+                            }).await {
+                                Ok(_) => {
+                                    log::info!("[Updater] Update installed successfully. Restart required.");
+                                    // Note: App will restart automatically on next launch
+                                }
+                                Err(e) => log::error!("[Updater] Failed to download/install update: {}", e),
+                            }
+                        }
+                        Ok(None) => log::info!("[Updater] App is up to date"),
+                        Err(e) => log::warn!("[Updater] Failed to check for updates: {}", e),
+                    },
+                    Err(e) => log::error!("[Updater] Failed to build updater: {}", e),
+                }
+                });
+            } else {
+                log::info!("[Updater] Auto-update disabled in settings");
             }
 
             handle.on_menu_event(|app_handle, event| match event.id().as_ref() {
@@ -121,6 +172,7 @@ pub fn run() {
             core::commands::get_settings,
             core::commands::save_settings,
             core::commands::ping,
+            core::commands::toggle_auto_translate,
             core::commands::frontend_log,
             core::commands::elevenlabs_streaming_connect,
             core::commands::elevenlabs_streaming_disconnect,
@@ -129,6 +181,16 @@ pub fn run() {
             core::commands::elevenlabs_streaming_send_chunk,
             core::commands::elevenlabs_streaming_is_connected,
             core::commands::show_overlay_no_focus,
+            // History commands
+            core::commands::get_history,
+            core::commands::clear_history,
+            core::commands::delete_history_entry,
+            // Test mode commands
+            core::commands::inject_test_audio,
+            core::commands::get_test_state,
+            core::commands::simulate_hotkey_press,
+            core::commands::simulate_hotkey_release,
+            core::commands::show_main_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

@@ -1,0 +1,19 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-get-history",
+      "description": "Allow getting transcription history",
+      "commands": { "allow": ["get_history"], "deny": [] }
+    },
+    {
+      "identifier": "allow-clear-history",
+      "description": "Allow clearing all history entries",
+      "commands": { "allow": ["clear_history"], "deny": [] }
+    },
+    {
+      "identifier": "allow-delete-history-entry",
+      "description": "Allow deleting a single history entry",
+      "commands": { "allow": ["delete_history_entry"], "deny": [] }
+    }
+  ]
+}

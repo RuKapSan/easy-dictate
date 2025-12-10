@@ -3,7 +3,7 @@
 use crate::settings::AppSettings;
 
 use super::{
-    events::{emit_error, emit_status, StatusPhase},
+    events::{emit_error, emit_settings_changed, emit_status, StatusPhase},
     hotkey,
     state::{AppState, AudioStreamingHandle},
 };
@@ -47,6 +47,37 @@ pub async fn save_settings(
 #[tauri::command]
 pub async fn ping() -> Result<&'static str, String> {
     Ok("pong")
+}
+
+#[tauri::command]
+pub async fn toggle_auto_translate(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let mut settings = state.current_settings().await;
+    settings.auto_translate = !settings.auto_translate;
+
+    // Persist the toggle
+    state
+        .persist_settings(&settings)
+        .await
+        .map_err(|err| err.to_string())?;
+    state.replace_settings(settings.clone()).await;
+
+    log::info!("[Toggle] Auto-translate now: {} (target: {})", settings.auto_translate, settings.target_language);
+
+    // Emit settings changed event for UI sync
+    emit_settings_changed(&app, settings.auto_translate, &settings.target_language);
+
+    // Emit status update with target language info
+    let message = if settings.auto_translate {
+        format!("Перевод ВКЛ → {}", settings.target_language)
+    } else {
+        "Перевод ВЫКЛ".to_string()
+    };
+    emit_status(&app, StatusPhase::Idle, Some(&message));
+
+    Ok(settings.auto_translate)
 }
 
 #[tauri::command]
@@ -345,6 +376,138 @@ pub async fn elevenlabs_streaming_is_connected(
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
     Ok(state.elevenlabs_streaming().is_connected().await)
+}
+
+// ============================================================================
+// History Commands
+// ============================================================================
+
+use super::state::HistoryEntry;
+
+#[tauri::command]
+pub async fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
+    Ok(state.get_history().await)
+}
+
+#[tauri::command]
+pub async fn clear_history(state: State<'_, AppState>) -> Result<(), String> {
+    state.clear_history().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_history_entry(
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<bool, String> {
+    Ok(state.delete_history_entry(id).await)
+}
+
+// ============================================================================
+// Test Mode Commands (for E2E testing without microphone)
+// ============================================================================
+
+/// Inject test audio directly into the transcription pipeline
+/// This bypasses the microphone completely for reliable E2E testing
+/// Accepts raw WAV bytes to avoid Tauri FS scope restrictions
+#[tauri::command]
+pub async fn inject_test_audio(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    audio_data: Vec<u8>,
+) -> Result<String, String> {
+    log::info!("[TestMode] Injecting test audio: {} bytes", audio_data.len());
+
+    if audio_data.is_empty() {
+        return Err("Audio data is empty".to_string());
+    }
+
+    // Validate WAV header (RIFF....WAVE)
+    if audio_data.len() < 12 || &audio_data[0..4] != b"RIFF" || &audio_data[8..12] != b"WAVE" {
+        return Err("Invalid WAV format: missing RIFF/WAVE header".to_string());
+    }
+
+    let audio_wav = audio_data;
+
+    // Get settings and perform transcription directly
+    let settings = state.current_settings().await;
+    let service = state.transcription();
+
+    // Emit status to UI
+    super::events::emit_status(&app, super::events::StatusPhase::Transcribing, Some("Processing test audio..."));
+
+    match service.perform(&settings, audio_wav).await {
+        Ok(text) => {
+            let trimmed = text.trim().to_string();
+            log::info!("[TestMode] Transcription result: {}", trimmed);
+
+            super::events::emit_status(&app, super::events::StatusPhase::Success, None);
+            super::events::emit_complete(&app, &trimmed);
+
+            Ok(trimmed)
+        }
+        Err(err) => {
+            log::error!("[TestMode] Transcription failed: {}", err);
+            super::events::emit_error(&app, &err.to_string());
+            Err(err.to_string())
+        }
+    }
+}
+
+/// Get current app state for testing
+#[tauri::command]
+pub async fn get_test_state(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    use std::sync::atomic::Ordering;
+
+    let is_recording = state.active_recording()
+        .lock()
+        .map(|guard| guard.is_some())
+        .unwrap_or(false);
+    let is_transcribing = state.is_transcribing().load(Ordering::SeqCst);
+    let settings = state.current_settings().await;
+
+    Ok(serde_json::json!({
+        "is_recording": is_recording,
+        "is_transcribing": is_transcribing,
+        "provider": format!("{:?}", settings.provider),
+        "has_api_key": !settings.api_key.is_empty(),
+        "hotkey": settings.hotkey
+    }))
+}
+
+/// Simulate hotkey press for testing (starts recording)
+#[tauri::command]
+pub async fn simulate_hotkey_press(app: AppHandle) -> Result<(), String> {
+    log::info!("[TestMode] Simulating hotkey press");
+    super::hotkey::handle_hotkey_pressed(&app, false);
+    Ok(())
+}
+
+/// Simulate hotkey release for testing (stops recording and triggers transcription)
+#[tauri::command]
+pub async fn simulate_hotkey_release(app: AppHandle) -> Result<(), String> {
+    log::info!("[TestMode] Simulating hotkey release");
+    super::hotkey::handle_hotkey_released(&app);
+    Ok(())
+}
+
+/// Show main window for E2E testing
+/// Used when tauri-driver launches the app and the window starts hidden
+#[tauri::command]
+pub async fn show_main_window(app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    log::info!("[TestMode] Showing main window");
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().map_err(|e| e.to_string())?;
+        window.unminimize().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        Err("Main window not found".to_string())
+    }
 }
 
 #[tauri::command]

@@ -1,0 +1,286 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # Run E2E tests first to ensure quality
+  test:
+    name: Run E2E Tests
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cache Cargo binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-bins-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bins-
+
+      - name: Cache E2E node_modules
+        uses: actions/cache@v4
+        with:
+          path: tests/e2e/node_modules
+          key: ${{ runner.os }}-e2e-node-${{ hashFiles('tests/e2e/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-node-
+
+      - name: Install E2E test dependencies
+        working-directory: tests/e2e
+        run: npm ci
+
+      - name: Install Tauri CLI
+        shell: bash
+        run: |
+          if ! command -v cargo-tauri &> /dev/null; then
+            cargo install tauri-cli --locked
+          else
+            echo "tauri-cli already installed"
+          fi
+
+      - name: Install tauri-driver
+        shell: bash
+        run: |
+          if ! command -v tauri-driver &> /dev/null; then
+            cargo install tauri-driver --locked
+          else
+            echo "tauri-driver already installed"
+          fi
+
+      - name: Build Tauri app (release)
+        working-directory: src-tauri
+        run: cargo tauri build
+
+      - name: Run E2E tests
+        working-directory: tests/e2e
+        run: npm test
+        env:
+          CI: true
+
+      - name: Upload E2E artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-failures
+          path: |
+            tests/e2e/screenshots/
+            tests/e2e/videos/
+            tests/e2e/logs/
+          retention-days: 7
+
+  # Build for all platforms
+  build:
+    name: Build ${{ matrix.platform.target }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundle_path: src-tauri/target/release/bundle/
+            artifacts: |
+              src-tauri/target/release/bundle/msi/*.msi
+              src-tauri/target/release/bundle/nsis/*.exe
+
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bundle_path: src-tauri/target/release/bundle/
+            artifacts: |
+              src-tauri/target/release/bundle/deb/*.deb
+              src-tauri/target/release/bundle/appimage/*.AppImage
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bundle_path: src-tauri/target/release/bundle/
+            artifacts: |
+              src-tauri/target/release/bundle/dmg/*.dmg
+              src-tauri/target/release/bundle/macos/*.app
+
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundle_path: src-tauri/target/release/bundle/
+            artifacts: |
+              src-tauri/target/release/bundle/dmg/*.dmg
+              src-tauri/target/release/bundle/macos/*.app
+
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.platform.target }}
+
+      - name: Cache Cargo binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-bins-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bins-
+
+      - name: Install Tauri CLI
+        shell: bash
+        run: |
+          if ! command -v cargo-tauri &> /dev/null; then
+            cargo install tauri-cli --locked
+          else
+            echo "tauri-cli already installed"
+          fi
+
+      - name: Build Tauri app for ${{ matrix.platform.target }}
+        working-directory: src-tauri
+        run: cargo tauri build --target ${{ matrix.platform.target }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform.target }}
+          path: ${{ matrix.platform.artifacts }}
+          retention-days: 7
+
+  # Create GitHub Release
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Display artifact structure
+        run: ls -R artifacts/
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          echo "## Changes" > CHANGELOG.md
+          git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s (%h)" >> CHANGELOG.md
+          cat CHANGELOG.md
+
+      - name: Generate updater manifest
+        id: manifest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Find the actual installer files
+          WIN_MSI=$(find artifacts/release-x86_64-pc-windows-msvc -name "*.msi" | head -1)
+          WIN_EXE=$(find artifacts/release-x86_64-pc-windows-msvc -name "*-setup.exe" | head -1)
+          LINUX_DEB=$(find artifacts/release-x86_64-unknown-linux-gnu -name "*.deb" | head -1)
+          LINUX_APPIMAGE=$(find artifacts/release-x86_64-unknown-linux-gnu -name "*.AppImage" | head -1)
+          MAC_INTEL_DMG=$(find artifacts/release-x86_64-apple-darwin -name "*.dmg" | head -1)
+          MAC_ARM_DMG=$(find artifacts/release-aarch64-apple-darwin -name "*.dmg" | head -1)
+
+          # Get base names for URLs
+          WIN_MSI_NAME=$(basename "$WIN_MSI")
+          WIN_EXE_NAME=$(basename "$WIN_EXE")
+          LINUX_DEB_NAME=$(basename "$LINUX_DEB")
+          LINUX_APPIMAGE_NAME=$(basename "$LINUX_APPIMAGE")
+          MAC_INTEL_DMG_NAME=$(basename "$MAC_INTEL_DMG")
+          MAC_ARM_DMG_NAME=$(basename "$MAC_ARM_DMG")
+
+          # Generate latest.json for Tauri updater
+          cat > latest.json << EOF
+          {
+            "version": "$VERSION",
+            "date": "$DATE",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "",
+                "url": "https://github.com/RuKapSan/easy-dictate/releases/download/v${VERSION}/${WIN_MSI_NAME}"
+              },
+              "linux-x86_64": {
+                "signature": "",
+                "url": "https://github.com/RuKapSan/easy-dictate/releases/download/v${VERSION}/${LINUX_APPIMAGE_NAME}"
+              },
+              "darwin-x86_64": {
+                "signature": "",
+                "url": "https://github.com/RuKapSan/easy-dictate/releases/download/v${VERSION}/${MAC_INTEL_DMG_NAME}"
+              },
+              "darwin-aarch64": {
+                "signature": "",
+                "url": "https://github.com/RuKapSan/easy-dictate/releases/download/v${VERSION}/${MAC_ARM_DMG_NAME}"
+              }
+            }
+          }
+          EOF
+
+          cat latest.json
+          echo "Updater manifest generated"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "Easy Dictate v${{ steps.version.outputs.version }}" \
+            --notes-file CHANGELOG.md \
+            latest.json \
+            artifacts/release-*/*
+
+      - name: Upload release artifacts
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            latest.json
+            artifacts/release-*/*
+          fail_on_unmatched_files: true

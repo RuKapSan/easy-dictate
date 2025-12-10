@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "Easy Dictate",
-        "width": 640,
-        "height": 800,
-        "minHeight": 600,
-        "maxHeight": 1280,
+        "width": 820,
+        "height": 680,
+        "minWidth": 720,
+        "minHeight": 500,
         "resizable": true,
         "fullscreen": false,
         "visible": false,
@@ -51,5 +51,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/RuKapSan/easy-dictate/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
   }
 }

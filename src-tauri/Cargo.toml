@@ -31,6 +31,7 @@ tauri-plugin-log = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-clipboard-manager = "2"
+tauri-plugin-updater = "2"
 reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["codec"] }
@@ -47,4 +48,7 @@ base64 = "0.22"
 futures = "0.3"
 futures-util = "0.3"
 urlencoding = "2.1"
+chrono = { version = "0.4", features = ["serde"] }
+
+[target.'cfg(windows)'.dependencies]
 windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
