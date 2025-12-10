@@ -1,32 +1,41 @@
 # Easy Dictate
 
-Десктопное приложение для голосового ввода текста с AI-транскрибацией. Нажал горячую клавишу — надиктовал — текст появился в любом приложении.
+[![GitHub release](https://img.shields.io/github/v/release/RuKapSan/easy-dictate)](https://github.com/RuKapSan/easy-dictate/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![Easy Dictate Screenshot](assets/screenshot.png)
+**[Русская версия](README.ru.md)**
 
-## Возможности
+Desktop voice-to-text application with AI transcription. Press hotkey, speak, text appears in any app.
 
-- **Push-to-talk диктовка** — удерживайте горячую клавишу и говорите
-- **3 провайдера транскрибации** — OpenAI Whisper, Groq (бесплатно), ElevenLabs (реалтайм)
-- **Автоперевод** — автоматический перевод на нужный язык после распознавания
-- **Свои инструкции** — постобработка текста через LLM (резюме, форматирование и т.д.)
-- **Эмуляция ввода** — текст печатается в активное окно как с клавиатуры
-- **Работа в фоне** — системный трей, автозапуск, горячие клавиши
-- **Автообновления** — приложение обновляется автоматически
+![Easy Dictate Main](assets/main.png)
 
-## Установка
+## Features
 
-### Готовые сборки
+- **Push-to-talk dictation** — hold hotkey and speak
+- **3 transcription providers** — OpenAI Whisper, Groq (free), ElevenLabs (realtime streaming)
+- **Auto-translation** — automatic translation to target language after transcription
+- **Custom instructions** — post-process text via LLM (summarize, format, etc.)
+- **Custom vocabulary** — auto-correct technical terms (Groq, Tauri, WebSocket, etc.)
+- **Transcription history** — browse, copy, and manage past transcriptions
+- **Typing simulation** — text is typed into active window as if from keyboard
+- **Background operation** — system tray, auto-start, global hotkeys
+- **Auto-updates** — automatic updates from GitHub releases
 
-Скачайте последнюю версию для вашей ОС:
+![Easy Dictate Settings](assets/settings.png)
 
-- **Windows**: `.msi` или `.exe` инсталлятор
-- **macOS**: `.dmg` (Intel и Apple Silicon)
-- **Linux**: `.deb` или `.AppImage`
+## Installation
 
-[Скачать последнюю версию](https://github.com/RuKapSan/easy-dictate/releases/latest)
+### Pre-built binaries
 
-### Сборка из исходников
+Download the latest version for your OS:
+
+- **Windows**: `.msi` or `.exe` installer
+- **macOS**: `.dmg` (Intel and Apple Silicon)
+- **Linux**: `.deb` or `.AppImage`
+
+[Download Latest Release](https://github.com/RuKapSan/easy-dictate/releases/latest)
+
+### Build from source
 
 ```bash
 git clone https://github.com/RuKapSan/easy-dictate.git
@@ -34,45 +43,45 @@ cd easy-dictate/src-tauri
 cargo tauri build
 ```
 
-Требования: Rust 1.77+, Node.js 18+
+Requirements: Rust 1.77+, Node.js 18+
 
-## Быстрый старт
+## Quick Start
 
-1. Установите приложение
-2. Выберите провайдера (Groq — бесплатный)
-3. Введите API ключ
-4. Нажмите горячую клавишу (по умолчанию `Ctrl+Shift+Space`)
-5. Говорите — текст появится в активном окне
+1. Install the application
+2. Select a provider (Groq is free)
+3. Enter your API key
+4. Press the hotkey (default: `Ctrl+Shift+Space`)
+5. Speak — text will appear in the active window
 
-## Горячие клавиши
+## Hotkeys
 
-| Клавиша | Действие |
-|---------|----------|
-| Основная | Запись и транскрибация |
-| С переводом | Запись + принудительный перевод |
-| Вкл/выкл перевод | Переключить автоперевод |
+| Hotkey | Action |
+|--------|--------|
+| Main | Record and transcribe |
+| With translation | Record + force translation |
+| Toggle translation | Toggle auto-translate on/off |
 
-Все клавиши настраиваются в разделе "Настройки".
+All hotkeys are configurable in Settings.
 
-## Провайдеры
+## Providers
 
-| Провайдер | Скорость | Цена | Особенности |
-|-----------|----------|------|-------------|
-| **Groq** | Быстро | Бесплатно | Whisper Large v3 |
-| **OpenAI** | Средне | Платно | GPT-4o Transcribe |
-| **ElevenLabs** | Реалтайм | Платно | Стриминг текста во время речи |
+| Provider | Speed | Price | Features |
+|----------|-------|-------|----------|
+| **Groq** | Fast | Free | Whisper Large v3 |
+| **OpenAI** | Medium | Paid | GPT-4o Transcribe |
+| **ElevenLabs** | Realtime | Paid | Text streaming during speech |
 
-## Технологии
+## Tech Stack
 
 - **Tauri v2** + Rust (backend)
-- **HTML/CSS/JS** (frontend, без фреймворков)
-- **cpal** (аудио захват)
+- **HTML/CSS/JS** (frontend, no frameworks)
+- **cpal** (audio capture)
 
-## Лицензия
+## License
 
 MIT
 
-## Ссылки
+## Links
 
 - [Releases](https://github.com/RuKapSan/easy-dictate/releases)
 - [Issues](https://github.com/RuKapSan/easy-dictate/issues)
