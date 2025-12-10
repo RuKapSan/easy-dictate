@@ -3,7 +3,7 @@
 use crate::settings::AppSettings;
 
 use super::{
-    events::{emit_error, emit_status, StatusPhase},
+    events::{emit_error, emit_settings_changed, emit_status, StatusPhase},
     hotkey,
     state::{AppState, AudioStreamingHandle},
 };
@@ -64,15 +64,18 @@ pub async fn toggle_auto_translate(
         .map_err(|err| err.to_string())?;
     state.replace_settings(settings.clone()).await;
 
-    log::info!("[Toggle] Auto-translate now: {}", settings.auto_translate);
+    log::info!("[Toggle] Auto-translate now: {} (target: {})", settings.auto_translate, settings.target_language);
 
-    // Emit status update
+    // Emit settings changed event for UI sync
+    emit_settings_changed(&app, settings.auto_translate, &settings.target_language);
+
+    // Emit status update with target language info
     let message = if settings.auto_translate {
-        "Translation enabled"
+        format!("Перевод ВКЛ → {}", settings.target_language)
     } else {
-        "Translation disabled"
+        "Перевод ВЫКЛ".to_string()
     };
-    emit_status(&app, StatusPhase::Idle, Some(message));
+    emit_status(&app, StatusPhase::Idle, Some(&message));
 
     Ok(settings.auto_translate)
 }

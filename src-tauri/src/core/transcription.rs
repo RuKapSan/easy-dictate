@@ -188,7 +188,12 @@ pub fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
 
                 // Save to history (only non-empty results)
                 if !trimmed.is_empty() {
-                    let _ = state.add_history_entry(trimmed.clone(), None).await;
+                    let _ = state.add_history_entry(
+                        trimmed.clone(),
+                        None, // translated_text - TODO: save separately when translation happens
+                        None, // source_language - TODO: detect from transcription
+                        if settings.auto_translate { Some(settings.target_language.clone()) } else { None },
+                    ).await;
                 }
 
                 emit_status(&app_handle, StatusPhase::Success, None);

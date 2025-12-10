@@ -7,7 +7,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcut, ShortcutState};
 use crate::{audio::RecordingSession, settings::{AppSettings, TranscriptionProvider}};
 
 use super::{
-    events::{emit_error, emit_status, StatusPhase},
+    events::{emit_error, emit_settings_changed, emit_status, StatusPhase},
     state::AppState,
     transcription,
 };
@@ -22,61 +22,83 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
         Err(e) => log::warn!("[Hotkey] Failed to unregister shortcuts: {}", e),
     }
 
-    // Small delay to ensure OS releases the hotkey handles (Windows quirk)
-    std::thread::sleep(std::time::Duration::from_millis(50));
+    // Longer delay to ensure OS releases the hotkey handles (Windows quirk)
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
+    let mut errors: Vec<String> = Vec::new();
 
     // Register main hotkey (respects auto_translate setting)
     let hotkey = settings.normalized_hotkey();
     let hotkey_clone = hotkey.clone();
-    shortcuts
-        .on_shortcut(
-            hotkey.as_str(),
-            move |app_handle, _shortcut, event| match event.state {
-                ShortcutState::Pressed => {
-                    handle_hotkey_pressed(app_handle, false);
-                }
-                ShortcutState::Released => {
-                    handle_hotkey_released(app_handle);
-                }
-            },
-        )
-        .map_err(|err| anyhow!("Failed to register hotkey {hotkey_clone}: {err}"))?;
+    match shortcuts.on_shortcut(
+        hotkey.as_str(),
+        move |app_handle, _shortcut, event| match event.state {
+            ShortcutState::Pressed => {
+                handle_hotkey_pressed(app_handle, false);
+            }
+            ShortcutState::Released => {
+                handle_hotkey_released(app_handle);
+            }
+        },
+    ) {
+        Ok(_) => log::info!("[Hotkey] Registered main hotkey: {}", hotkey_clone),
+        Err(e) => {
+            log::error!("[Hotkey] Failed to register main hotkey {}: {}", hotkey_clone, e);
+            errors.push(format!("Main hotkey '{}': {}", hotkey_clone, e));
+        }
+    }
 
     // Register translate hotkey (forces translation ON for this session)
     if !settings.translate_hotkey.is_empty() {
         let translate_hotkey = settings.translate_hotkey.trim().to_string();
         let translate_hotkey_clone = translate_hotkey.clone();
-        shortcuts
-            .on_shortcut(
-                translate_hotkey.as_str(),
-                move |app_handle, _shortcut, event| match event.state {
-                    ShortcutState::Pressed => {
-                        handle_hotkey_pressed(app_handle, true);
-                    }
-                    ShortcutState::Released => {
-                        handle_hotkey_released(app_handle);
-                    }
-                },
-            )
-            .map_err(|err| anyhow!("Failed to register translate hotkey {translate_hotkey_clone}: {err}"))?;
-        log::info!("[Hotkey] Registered translate hotkey: {}", translate_hotkey);
+        match shortcuts.on_shortcut(
+            translate_hotkey.as_str(),
+            move |app_handle, _shortcut, event| match event.state {
+                ShortcutState::Pressed => {
+                    handle_hotkey_pressed(app_handle, true);
+                }
+                ShortcutState::Released => {
+                    handle_hotkey_released(app_handle);
+                }
+            },
+        ) {
+            Ok(_) => log::info!("[Hotkey] Registered translate hotkey: {}", translate_hotkey_clone),
+            Err(e) => {
+                log::error!("[Hotkey] Failed to register translate hotkey {}: {}", translate_hotkey_clone, e);
+                errors.push(format!("Translate hotkey '{}': {}", translate_hotkey_clone, e));
+            }
+        }
     }
 
     // Register toggle translate hotkey
     if !settings.toggle_translate_hotkey.is_empty() {
         let toggle_hotkey = settings.toggle_translate_hotkey.trim().to_string();
         let toggle_hotkey_clone = toggle_hotkey.clone();
-        shortcuts
-            .on_shortcut(
-                toggle_hotkey.as_str(),
-                move |app_handle, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        handle_toggle_translate_hotkey(app_handle);
-                    }
-                },
-            )
-            .map_err(|err| anyhow!("Failed to register toggle translate hotkey {toggle_hotkey_clone}: {err}"))?;
-        log::info!("[Hotkey] Registered toggle translate hotkey: {}", toggle_hotkey);
+        match shortcuts.on_shortcut(
+            toggle_hotkey.as_str(),
+            move |app_handle, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    handle_toggle_translate_hotkey(app_handle);
+                }
+            },
+        ) {
+            Ok(_) => log::info!("[Hotkey] Registered toggle translate hotkey: {}", toggle_hotkey_clone),
+            Err(e) => {
+                log::error!("[Hotkey] Failed to register toggle translate hotkey {}: {}", toggle_hotkey_clone, e);
+                errors.push(format!("Toggle hotkey '{}': {}", toggle_hotkey_clone, e));
+            }
+        }
+    }
+
+    // Return error only if ALL hotkeys failed
+    if !errors.is_empty() && errors.len() >= 1 {
+        // Log all errors but only fail if main hotkey failed (it's required)
+        if errors.iter().any(|e| e.starts_with("Main hotkey")) {
+            return Err(anyhow!("Failed to register hotkeys: {}", errors.join("; ")));
+        }
+        // Non-critical hotkeys failed - log warning but continue
+        log::warn!("[Hotkey] Some optional hotkeys failed to register: {}", errors.join("; "));
     }
 
     Ok(())
@@ -111,15 +133,18 @@ pub fn handle_toggle_translate_hotkey(app: &AppHandle) {
         }
         state.replace_settings(settings.clone()).await;
 
-        log::info!("[Toggle Hotkey] Auto-translate now: {}", settings.auto_translate);
+        log::info!("[Toggle Hotkey] Auto-translate now: {} (target: {})", settings.auto_translate, settings.target_language);
 
-        // Emit status update
+        // Emit settings changed event for UI sync
+        emit_settings_changed(&app_clone, settings.auto_translate, &settings.target_language);
+
+        // Emit status update with target language info
         let message = if settings.auto_translate {
-            "Translation enabled"
+            format!("Перевод ВКЛ → {}", settings.target_language)
         } else {
-            "Translation disabled"
+            "Перевод ВЫКЛ".to_string()
         };
-        emit_status(&app_clone, StatusPhase::Idle, Some(message));
+        emit_status(&app_clone, StatusPhase::Idle, Some(&message));
     });
 }
 
