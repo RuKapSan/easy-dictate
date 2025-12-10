@@ -30,23 +30,34 @@ function hydrateTauriApis() {
 
 hydrateTauriApis();
 
-const statusIndicator = document.getElementById("status-indicator");
+// ============================================================================
+// DOM Elements
+// ============================================================================
+
+// Tab navigation
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabContents = document.querySelectorAll('.tab-content');
+
+// Status elements
 const statusOrb = document.getElementById("status-orb");
-const statusCard = document.getElementById("statusCard");
 const statusText = document.getElementById("status-text");
+const statusHint = document.getElementById("status-hint");
 const progressEl = document.getElementById("progress");
 const resultEl = document.getElementById("last-result");
 const toastEl = document.getElementById("toast");
 
+// Form and settings
 const form = document.getElementById("settings-form");
-const providerSelect = document.getElementById("provider");
+const providerRadios = document.querySelectorAll('input[name="provider"]');
 const apiKeyInput = document.getElementById("apiKey");
 const groqApiKeyInput = document.getElementById("groqApiKey");
 const elevenlabsApiKeyInput = document.getElementById("elevenlabsApiKey");
-const openaiApiKeyLabel = document.getElementById("openai-api-key-label");
-const groqApiKeyLabel = document.getElementById("groq-api-key-label");
-const elevenlabsApiKeyLabel = document.getElementById("elevenlabs-api-key-label");
+const openaiApiKeyField = document.getElementById("openai-api-key-field");
+const groqApiKeyField = document.getElementById("groq-api-key-field");
+const elevenlabsApiKeyField = document.getElementById("elevenlabs-api-key-field");
 const modelSelect = document.getElementById("model");
+
+// Hotkeys
 const hotkeyHiddenInput = document.getElementById("hotkey");
 const hotkeyDisplay = document.getElementById("hotkeyDisplay");
 const hotkeyClearBtn = document.getElementById("hotkeyClear");
@@ -56,105 +67,115 @@ const translateHotkeyClearBtn = document.getElementById("translateHotkeyClear");
 const toggleTranslateHotkeyHiddenInput = document.getElementById("toggleTranslateHotkey");
 const toggleTranslateHotkeyDisplay = document.getElementById("toggleTranslateHotkeyDisplay");
 const toggleTranslateHotkeyClearBtn = document.getElementById("toggleTranslateHotkeyClear");
+
+// Behavior toggles
 const simulateTypingInput = document.getElementById("simulateTyping");
 const copyToClipboardInput = document.getElementById("copyToClipboard");
 const autoStartInput = document.getElementById("autoStart");
 const startMinimizedInput = document.getElementById("startMinimized");
 const autoUpdateInput = document.getElementById("autoUpdate");
 const useStreamingInput = document.getElementById("useStreaming");
+
+// Translation
 const autoTranslateInput = document.getElementById("autoTranslate");
 const targetLanguageSelect = document.getElementById("targetLanguage");
+const translationOptions = document.getElementById("translationOptions");
+const llmProviderSelect = document.getElementById("llmProvider");
+
+// Custom instructions
 const useCustomInstructionsInput = document.getElementById("useCustomInstructions");
 const customInstructionsWrapper = document.getElementById("customInstructionsWrapper");
 const customInstructionsInput = document.getElementById("customInstructions");
-const llmProviderLabel = document.getElementById("llm-provider-label");
-const llmProviderSelect = document.getElementById("llmProvider");
+
+// Actions
 const revertBtn = document.getElementById("revertBtn");
+
+// History
+const historyListEl = document.getElementById("historyList");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+
+// ============================================================================
+// Constants
+// ============================================================================
 
 const DEFAULT_HOTKEY = "Ctrl+Shift+Space";
 const MODIFIER_ORDER = ["Ctrl", "Shift", "Alt", "Win"];
 const MODIFIER_NAMES = new Set(MODIFIER_ORDER);
 const MODIFIER_CODES = new Set([
-  "ControlLeft",
-  "ControlRight",
-  "ShiftLeft",
-  "ShiftRight",
-  "AltLeft",
-  "AltRight",
-  "MetaLeft",
-  "MetaRight",
+  "ControlLeft", "ControlRight",
+  "ShiftLeft", "ShiftRight",
+  "AltLeft", "AltRight",
+  "MetaLeft", "MetaRight",
 ]);
 const KEY_CODE_LABELS = {
-  Space: "Space",
-  Escape: "Esc",
-  Enter: "Enter",
-  Tab: "Tab",
-  Backspace: "Backspace",
-  Delete: "Delete",
-  ArrowUp: "Up",
-  ArrowDown: "Down",
-  ArrowLeft: "Left",
-  ArrowRight: "Right",
-  CapsLock: "CapsLock",
-  PageUp: "PageUp",
-  PageDown: "PageDown",
-  Home: "Home",
-  End: "End",
-  Insert: "Insert",
-  Pause: "Pause",
-  PrintScreen: "PrintScreen",
-  ScrollLock: "ScrollLock",
+  Space: "Space", Escape: "Esc", Enter: "Enter", Tab: "Tab",
+  Backspace: "Backspace", Delete: "Delete",
+  ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right",
+  CapsLock: "CapsLock", PageUp: "PageUp", PageDown: "PageDown",
+  Home: "Home", End: "End", Insert: "Insert",
+  Pause: "Pause", PrintScreen: "PrintScreen", ScrollLock: "ScrollLock",
   ContextMenu: "ContextMenu",
-  Backquote: "`",
-  Minus: "-",
-  Equal: "=",
-  BracketLeft: "[",
-  BracketRight: "]",
-  Backslash: "\\",
-  IntlBackslash: "IntlBackslash",
-  Semicolon: ";",
-  Quote: "'",
-  Comma: ",",
-  Period: ".",
-  Slash: "/",
+  Backquote: "`", Minus: "-", Equal: "=",
+  BracketLeft: "[", BracketRight: "]", Backslash: "\\",
+  IntlBackslash: "IntlBackslash", Semicolon: ";", Quote: "'",
+  Comma: ",", Period: ".", Slash: "/",
 };
 const MOUSE_BUTTON_NAMES = {
-  0: "MouseLeft",
-  1: "MouseMiddle",
-  2: "MouseRight",
-  3: "MouseButton4",
-  4: "MouseButton5",
+  0: "MouseLeft", 1: "MouseMiddle", 2: "MouseRight",
+  3: "MouseButton4", 4: "MouseButton5",
 };
 
 let initialSettings = null;
 let isCapturingHotkey = false;
 let hotkeyBeforeCapture = "";
 const pressedModifiers = new Set();
-let currentCapturingTarget = null; // 'main', 'translate', or 'toggle'
+let currentCapturingTarget = null;
+
+// ============================================================================
+// Tab Navigation
+// ============================================================================
+
+function initTabs() {
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabName = btn.dataset.tab;
+
+      // Update buttons
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      // Update content
+      tabContents.forEach(content => {
+        content.classList.toggle('active', content.dataset.tab === tabName);
+      });
+    });
+  });
+}
+
+// ============================================================================
+// Toast
+// ============================================================================
 
 function showToast(message, type = "info") {
   if (!toastEl) return;
   toastEl.textContent = message;
   toastEl.dataset.type = type;
   toastEl.hidden = false;
-  setTimeout(() => {
-    toastEl.hidden = true;
-  }, 2800);
+  setTimeout(() => { toastEl.hidden = true; }, 2800);
 }
 
+// ============================================================================
+// Settings Persistence
+// ============================================================================
+
 async function persistSettings(payload, successMessage = "Сохранено") {
-  console.log(`[PERSIST] Calling persistSettings with:`, payload);
   dbg(`persistSettings: ${JSON.stringify(payload)}`);
   if (!invoke) {
-    console.error("[PERSIST] invoke is not available!");
     dbg("invoke is not available in persistSettings", "error");
     return false;
   }
   try {
-    console.log("[PERSIST] Calling invoke('save_settings')...");
-    dbg("invoke(save_settings) ...");
     await invoke("save_settings", { settings: payload });
-    console.log("[PERSIST] invoke('save_settings') succeeded!");
     dbg("invoke(save_settings) ok");
     initialSettings = { ...payload };
     if (emit) emit('settings://changed', {});
@@ -162,38 +183,39 @@ async function persistSettings(payload, successMessage = "Сохранено") {
     return true;
   } catch (error) {
     console.error("[PERSIST] save_settings failed:", error);
-    console.error(error);
     dbg(`save_settings failed: ${String(error)}`, "error");
     showToast("Ошибка при сохранении", "error");
     return false;
   }
 }
 
-function setStatus(state, text) {
-  // Update orb state
+// ============================================================================
+// Status
+// ============================================================================
+
+function setStatus(state, text, hint = null) {
   if (statusOrb) {
     statusOrb.className = `status-orb ${state}`;
   }
-  // Update card active state for scan animation
-  if (statusCard) {
-    statusCard.classList.toggle("active", state === "recording" || state === "transcribing");
-  }
-  // Update pill indicator (hidden but kept for compatibility)
-  if (statusIndicator) {
-    statusIndicator.className = `pill ${state}`;
-    statusIndicator.textContent =
-      state === "recording"
-        ? "Запись"
-        : state === "transcribing"
-          ? "Отправка"
-          : state === "success"
-            ? "Готово"
-            : state === "error"
-              ? "Ошибка"
-              : "Ожидает";
-  }
   if (statusText) statusText.textContent = text;
+  if (statusHint) {
+    statusHint.textContent = hint ?? getDefaultHint(state);
+  }
 }
+
+function getDefaultHint(state) {
+  switch (state) {
+    case 'recording': return 'Отпустите клавишу для завершения';
+    case 'transcribing': return 'Обработка аудио...';
+    case 'success': return 'Текст скопирован';
+    case 'error': return 'Попробуйте ещё раз';
+    default: return 'Нажмите горячую клавишу для начала';
+  }
+}
+
+// ============================================================================
+// Hotkey Handling
+// ============================================================================
 
 function normalizeHotkeyValue(value) {
   return (value ?? "").trim();
@@ -201,36 +223,21 @@ function normalizeHotkeyValue(value) {
 
 function getHotkeyElements(target) {
   if (target === 'translate') {
-    return {
-      hidden: translateHotkeyHiddenInput,
-      display: translateHotkeyDisplay,
-      clearBtn: translateHotkeyClearBtn
-    };
+    return { hidden: translateHotkeyHiddenInput, display: translateHotkeyDisplay, clearBtn: translateHotkeyClearBtn };
   } else if (target === 'toggle') {
-    return {
-      hidden: toggleTranslateHotkeyHiddenInput,
-      display: toggleTranslateHotkeyDisplay,
-      clearBtn: toggleTranslateHotkeyClearBtn
-    };
+    return { hidden: toggleTranslateHotkeyHiddenInput, display: toggleTranslateHotkeyDisplay, clearBtn: toggleTranslateHotkeyClearBtn };
   } else {
-    return {
-      hidden: hotkeyHiddenInput,
-      display: hotkeyDisplay,
-      clearBtn: hotkeyClearBtn
-    };
+    return { hidden: hotkeyHiddenInput, display: hotkeyDisplay, clearBtn: hotkeyClearBtn };
   }
 }
 
 function renderHotkey(value, target = currentCapturingTarget || 'main') {
   const normalized = normalizeHotkeyValue(value);
   const elements = getHotkeyElements(target);
-
-  if (elements.hidden) {
-    elements.hidden.value = normalized;
-  }
+  if (elements.hidden) elements.hidden.value = normalized;
   if (!elements.display) return;
   if (!normalized) {
-    elements.display.textContent = "Кликните для записи";
+    elements.display.textContent = "Не задано";
     elements.display.dataset.empty = "true";
   } else {
     elements.display.textContent = normalized;
@@ -240,11 +247,10 @@ function renderHotkey(value, target = currentCapturingTarget || 'main') {
 
 function applyHotkeyRecordingStyles(active, previewText, target = currentCapturingTarget || 'main') {
   const elements = getHotkeyElements(target);
-
   if (elements.display) {
     elements.display.classList.toggle("capturing", active);
     if (active) {
-      elements.display.textContent = previewText ?? "Нажмите клавиши...";
+      elements.display.textContent = previewText ?? "Нажмите...";
       elements.display.dataset.empty = "false";
     }
   }
@@ -268,11 +274,10 @@ function cancelHotkeyCapture() {
   pressedModifiers.clear();
   applyHotkeyRecordingStyles(false, null, target);
   renderHotkey(hotkeyBeforeCapture, target);
-  hotkeyBeforeCapture = ""; // Clear to prevent memory leaks
+  hotkeyBeforeCapture = "";
 }
 
 function finishHotkeyCapture(binding) {
-  console.log(`[HOTKEY] finishHotkeyCapture called with binding: ${binding}`);
   if (!isCapturingHotkey) return;
   const target = currentCapturingTarget;
   isCapturingHotkey = false;
@@ -280,24 +285,22 @@ function finishHotkeyCapture(binding) {
   pressedModifiers.clear();
   applyHotkeyRecordingStyles(false, null, target);
   const normalized = normalizeHotkeyValue(binding);
-  console.log(`[HOTKEY] Normalized binding: ${normalized} for target: ${target}`);
   if (normalized) {
     if (!bindingHasMainKey(normalized)) {
-      showToast("Сочетание должно содержать основную клавишу", "error");
+      showToast("Нужна основная клавиша", "error");
       renderHotkey(hotkeyBeforeCapture, target);
       return;
     }
     if (bindingUsesMouse(normalized)) {
-      showToast("Глобальные шорткаты мыши не поддерживаются Windows", "error");
+      showToast("Мышь не поддерживается", "error");
       renderHotkey(hotkeyBeforeCapture, target);
       return;
     }
     renderHotkey(normalized, target);
     const payload = currentSettings();
-    console.log(`[HOTKEY] Calling persistSettings with payload:`, payload);
-    const successMsg = target === 'translate' ? "Горячая клавиша перевода обновлена"
-      : target === 'toggle' ? "Горячая клавиша переключения обновлена"
-      : "Горячая клавиша обновлена";
+    const successMsg = target === 'translate' ? "Клавиша перевода сохранена"
+      : target === 'toggle' ? "Клавиша переключения сохранена"
+      : "Горячая клавиша сохранена";
     persistSettings(payload, successMsg);
   } else {
     renderHotkey(hotkeyBeforeCapture, target);
@@ -315,15 +318,13 @@ function modifierLabelFromCode(code) {
 
 function normalizeModifiers(modifiers) {
   const unique = new Set(modifiers);
-  return MODIFIER_ORDER.filter((name) => unique.has(name));
+  return MODIFIER_ORDER.filter(name => unique.has(name));
 }
 
 function updateHotkeyPreview() {
   if (!isCapturingHotkey) return;
   const modifiers = normalizeModifiers(Array.from(pressedModifiers));
-  const preview = modifiers.length
-    ? `${modifiers.join("+")} + …`
-    : "Удерживайте клавиши";
+  const preview = modifiers.length ? `${modifiers.join("+")} + …` : "Удерживайте...";
   applyHotkeyRecordingStyles(true, preview);
 }
 
@@ -333,21 +334,12 @@ function isModifierKey(code) {
 
 function keyCodeToHotkeyName(code) {
   if (!code) return null;
-  if (/^F\d{1,2}$/i.test(code)) {
-    return code.toUpperCase();
-  }
-  if (code.startsWith("Key")) {
-    return code.slice(3).toUpperCase();
-  }
-  if (code.startsWith("Digit")) {
-    return code.slice(5);
-  }
+  if (/^F\d{1,2}$/i.test(code)) return code.toUpperCase();
+  if (code.startsWith("Key")) return code.slice(3).toUpperCase();
+  if (code.startsWith("Digit")) return code.slice(5);
   if (code.startsWith("Numpad")) {
     const suffix = code.slice(6);
     if (!suffix) return null;
-    if (/^\d$/.test(suffix)) {
-      return `Numpad${suffix}`;
-    }
     return `Numpad${suffix}`;
   }
   return KEY_CODE_LABELS[code] ?? null;
@@ -355,18 +347,14 @@ function keyCodeToHotkeyName(code) {
 
 function formatKeyboardHotkey(event) {
   const keyName = keyCodeToHotkeyName(event.code);
-  if (!keyName || MODIFIER_NAMES.has(keyName)) {
-    return "";
-  }
+  if (!keyName || MODIFIER_NAMES.has(keyName)) return "";
   const modifiers = normalizeModifiers(Array.from(pressedModifiers));
   return [...modifiers, keyName].join("+");
 }
 
 function formatMouseHotkey(event) {
   const buttonName = MOUSE_BUTTON_NAMES[event.button];
-  if (!buttonName) {
-    return "";
-  }
+  if (!buttonName) return "";
   const modifiers = normalizeModifiers(Array.from(pressedModifiers));
   return [...modifiers, buttonName].join("+");
 }
@@ -376,25 +364,63 @@ function bindingUsesMouse(binding) {
 }
 
 function bindingHasMainKey(binding) {
-  return binding
-    .split("+")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .some((part) => !MODIFIER_NAMES.has(part));
+  return binding.split("+").map(p => p.trim()).filter(Boolean).some(p => !MODIFIER_NAMES.has(p));
+}
+
+// ============================================================================
+// Provider & UI Sync
+// ============================================================================
+
+function getSelectedProvider() {
+  for (const radio of providerRadios) {
+    if (radio.checked) return radio.value;
+  }
+  return 'openai';
+}
+
+function setSelectedProvider(value) {
+  for (const radio of providerRadios) {
+    radio.checked = radio.value === value;
+  }
+}
+
+function updateProviderFields() {
+  const provider = getSelectedProvider();
+
+  // Show only relevant API key field
+  if (openaiApiKeyField) openaiApiKeyField.hidden = provider !== 'openai';
+  if (groqApiKeyField) groqApiKeyField.hidden = provider !== 'groq';
+  if (elevenlabsApiKeyField) elevenlabsApiKeyField.hidden = provider !== 'elevenlabs';
+
+  // Update model options
+  const currentModel = modelSelect?.value || '';
+  if (!modelSelect) return;
+
+  modelSelect.innerHTML = '';
+
+  if (provider === 'groq') {
+    modelSelect.innerHTML = `
+      <option value="groq/whisper-large-v3-turbo">Whisper Large v3 Turbo</option>
+      <option value="groq/whisper-large-v3">Whisper Large v3</option>
+    `;
+    modelSelect.value = currentModel.startsWith("groq/") ? currentModel : "groq/whisper-large-v3-turbo";
+  } else if (provider === 'elevenlabs') {
+    modelSelect.innerHTML = `<option value="scribe_v2_realtime">Scribe v2 Realtime</option>`;
+    modelSelect.value = "scribe_v2_realtime";
+  } else {
+    modelSelect.innerHTML = `
+      <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
+      <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
+      <option value="whisper-1">whisper-1 (fallback)</option>
+    `;
+    modelSelect.value = currentModel.startsWith("groq/") ? "gpt-4o-transcribe" : currentModel;
+  }
 }
 
 function syncTranslationUi() {
-  if (!targetLanguageSelect) return;
-  const enabled = Boolean(autoTranslateInput?.checked);
-  targetLanguageSelect.disabled = !enabled;
-  targetLanguageSelect.classList.toggle("is-disabled", !enabled);
-  updateLLMProviderVisibility();
-}
-
-function updateLLMProviderVisibility() {
-  const needsLLM = autoTranslateInput?.checked || useCustomInstructionsInput?.checked;
-  if (llmProviderLabel) {
-    llmProviderLabel.hidden = !needsLLM;
+  const enabled = autoTranslateInput?.checked;
+  if (translationOptions) {
+    translationOptions.classList.toggle('disabled', !enabled);
   }
 }
 
@@ -403,62 +429,29 @@ function syncCustomInstructionsUi() {
   const enabled = Boolean(useCustomInstructionsInput?.checked);
   customInstructionsWrapper.hidden = !enabled;
   customInstructionsInput.disabled = !enabled;
-  updateLLMProviderVisibility();
 }
 
-function updateProviderFields() {
-  const provider = providerSelect?.value;
-  if (!provider) return;
+// ============================================================================
+// Toggle Password Visibility
+// ============================================================================
 
-  const isGroq = provider === "groq";
-  const isElevenLabs = provider === "elevenlabs";
+function initPasswordToggles() {
+  document.querySelectorAll('.toggle-password').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const input = document.getElementById(targetId);
+      if (!input) return;
 
-  // Update API key labels visibility
-  if (openaiApiKeyLabel) openaiApiKeyLabel.hidden = isElevenLabs; // Hide OpenAI key for ElevenLabs
-  if (groqApiKeyLabel) groqApiKeyLabel.hidden = !isGroq;
-  if (elevenlabsApiKeyLabel) elevenlabsApiKeyLabel.hidden = !isElevenLabs;
-
-  // Update hint for OpenAI API key
-  const openaiHint = document.getElementById("openai-api-hint");
-  if (openaiHint) {
-    openaiHint.textContent = isGroq ? "(для перевода и инструкций)" : "";
-  }
-
-  // Update model options based on provider
-  const currentModel = modelSelect.value;
-  modelSelect.innerHTML = '';
-
-  if (isGroq) {
-    modelSelect.innerHTML = `
-      <option value="groq/whisper-large-v3-turbo">Whisper Large v3 Turbo</option>
-      <option value="groq/whisper-large-v3">Whisper Large v3</option>
-    `;
-    if (!currentModel.startsWith("groq/")) {
-      modelSelect.value = "groq/whisper-large-v3-turbo";
-    } else {
-      modelSelect.value = currentModel;
-    }
-  } else if (isElevenLabs) {
-    modelSelect.innerHTML = `
-      <option value="scribe_v2_realtime">Scribe v2 Realtime</option>
-    `;
-    modelSelect.value = "scribe_v2_realtime";
-  } else {
-    modelSelect.innerHTML = `
-      <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
-      <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
-      <option value="whisper-1">whisper-1 (fallback)</option>
-    `;
-    if (currentModel.startsWith("groq/")) {
-      modelSelect.value = "gpt-4o-transcribe";
-    } else {
-      modelSelect.value = currentModel;
-    }
-  }
+      const isPassword = input.type === 'password';
+      input.type = isPassword ? 'text' : 'password';
+      btn.classList.toggle('active', !isPassword);
+    });
+  });
 }
 
-syncTranslationUi();
-syncCustomInstructionsUi();
+// ============================================================================
+// Settings Load/Save
+// ============================================================================
 
 async function loadSettings() {
   dbg("loadSettings() called");
@@ -467,43 +460,52 @@ async function loadSettings() {
     return;
   }
   try {
-    dbg("invoke(get_settings) ...");
     const settings = await invoke("get_settings");
     dbg("invoke(get_settings) ok");
     initialSettings = { ...settings };
-    providerSelect.value = settings.provider ?? "openai";
-    if (llmProviderSelect) llmProviderSelect.value = settings.llm_provider ?? "openai";
-    apiKeyInput.value = settings.api_key ?? "";
-    groqApiKeyInput.value = settings.groq_api_key ?? "";
-    elevenlabsApiKeyInput.value = settings.elevenlabs_api_key ?? "";
-    modelSelect.value = settings.model ?? "gpt-4o-transcribe";
+
+    // Provider
+    setSelectedProvider(settings.provider ?? "openai");
     updateProviderFields();
+
+    // API Keys
+    if (apiKeyInput) apiKeyInput.value = settings.api_key ?? "";
+    if (groqApiKeyInput) groqApiKeyInput.value = settings.groq_api_key ?? "";
+    if (elevenlabsApiKeyInput) elevenlabsApiKeyInput.value = settings.elevenlabs_api_key ?? "";
+
+    // Model
+    if (modelSelect) modelSelect.value = settings.model ?? "gpt-4o-transcribe";
+
+    // Hotkeys
     renderHotkey(settings.hotkey ?? DEFAULT_HOTKEY, 'main');
     renderHotkey(settings.translate_hotkey ?? "", 'translate');
     renderHotkey(settings.toggle_translate_hotkey ?? "", 'toggle');
-    simulateTypingInput.checked = Boolean(settings.simulate_typing);
-    copyToClipboardInput.checked = Boolean(settings.copy_to_clipboard);
-    autoStartInput.checked = Boolean(settings.auto_start);
-    startMinimizedInput.checked = Boolean(settings.start_minimized);
-    autoUpdateInput.checked = Boolean(settings.auto_update ?? true); // Default to true
-    useStreamingInput.checked = Boolean(settings.use_streaming);
-    autoTranslateInput.checked = Boolean(settings.auto_translate);
-    targetLanguageSelect.value = settings.target_language ?? "русский";
-    if (useCustomInstructionsInput) {
-      useCustomInstructionsInput.checked = Boolean(settings.use_custom_instructions);
-    }
-    if (customInstructionsInput) {
-      customInstructionsInput.value = settings.custom_instructions ?? "";
-    }
+
+    // Behavior
+    if (simulateTypingInput) simulateTypingInput.checked = Boolean(settings.simulate_typing);
+    if (copyToClipboardInput) copyToClipboardInput.checked = Boolean(settings.copy_to_clipboard);
+    if (useStreamingInput) useStreamingInput.checked = Boolean(settings.use_streaming);
+
+    // System
+    if (autoStartInput) autoStartInput.checked = Boolean(settings.auto_start);
+    if (startMinimizedInput) startMinimizedInput.checked = Boolean(settings.start_minimized);
+    if (autoUpdateInput) autoUpdateInput.checked = Boolean(settings.auto_update ?? true);
+
+    // Translation
+    if (autoTranslateInput) autoTranslateInput.checked = Boolean(settings.auto_translate);
+    if (targetLanguageSelect) targetLanguageSelect.value = settings.target_language ?? "русский";
+    if (llmProviderSelect) llmProviderSelect.value = settings.llm_provider ?? "groq";
+
+    // Custom instructions
+    if (useCustomInstructionsInput) useCustomInstructionsInput.checked = Boolean(settings.use_custom_instructions);
+    if (customInstructionsInput) customInstructionsInput.value = settings.custom_instructions ?? "";
+
     syncTranslationUi();
     syncCustomInstructionsUi();
 
-    // Initialize ElevenLabs streaming if provider is ElevenLabs
+    // Initialize ElevenLabs streaming if needed
     if (window.ElevenLabsSTT?.init) {
-      dbg(`Calling ElevenLabsSTT.init with provider: ${settings.provider}`);
       await window.ElevenLabsSTT.init(settings);
-    } else {
-      dbg("ElevenLabsSTT.init is not available", "warn");
     }
   } catch (error) {
     console.error(error);
@@ -513,154 +515,124 @@ async function loadSettings() {
 
 function currentSettings() {
   return {
-    provider: providerSelect.value,
-    llm_provider: llmProviderSelect?.value ?? "openai",
-    api_key: apiKeyInput.value.trim(),
-    groq_api_key: groqApiKeyInput.value.trim(),
-    elevenlabs_api_key: elevenlabsApiKeyInput.value.trim(),
-    model: modelSelect.value,
+    provider: getSelectedProvider(),
+    llm_provider: llmProviderSelect?.value ?? "groq",
+    api_key: apiKeyInput?.value.trim() ?? "",
+    groq_api_key: groqApiKeyInput?.value.trim() ?? "",
+    elevenlabs_api_key: elevenlabsApiKeyInput?.value.trim() ?? "",
+    model: modelSelect?.value ?? "gpt-4o-transcribe",
     hotkey: normalizeHotkeyValue(hotkeyHiddenInput?.value),
     translate_hotkey: normalizeHotkeyValue(translateHotkeyHiddenInput?.value),
     toggle_translate_hotkey: normalizeHotkeyValue(toggleTranslateHotkeyHiddenInput?.value),
-    simulate_typing: simulateTypingInput.checked,
-    copy_to_clipboard: copyToClipboardInput.checked,
-    auto_start: autoStartInput.checked,
-    start_minimized: startMinimizedInput.checked,
-    auto_update: autoUpdateInput.checked,
-    use_streaming: useStreamingInput.checked,
-    auto_translate: autoTranslateInput.checked,
-    target_language: targetLanguageSelect.value,
+    simulate_typing: simulateTypingInput?.checked ?? false,
+    copy_to_clipboard: copyToClipboardInput?.checked ?? false,
+    auto_start: autoStartInput?.checked ?? false,
+    start_minimized: startMinimizedInput?.checked ?? false,
+    auto_update: autoUpdateInput?.checked ?? true,
+    use_streaming: useStreamingInput?.checked ?? false,
+    auto_translate: autoTranslateInput?.checked ?? false,
+    target_language: targetLanguageSelect?.value ?? "русский",
     use_custom_instructions: useCustomInstructionsInput?.checked ?? false,
     custom_instructions: (customInstructionsInput?.value ?? "").trim(),
   };
 }
 
+// ============================================================================
+// Event Handlers
+// ============================================================================
+
+// Form submit
 form?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  dbg("Form submit clicked");
-  if (isCapturingHotkey) {
-    cancelHotkeyCapture();
-  }
+  if (isCapturingHotkey) cancelHotkeyCapture();
+
   const payload = currentSettings();
-  dbg(`currentSettings on submit: ${JSON.stringify(payload)}`);
   if (!payload.hotkey) {
-    showToast("Сочетание клавиш не выбрано", "error");
+    showToast("Выберите горячую клавишу", "error");
     return;
   }
   if (!bindingHasMainKey(payload.hotkey)) {
-    showToast("Сочетание должно содержать основную клавишу", "error");
+    showToast("Нужна основная клавиша", "error");
     return;
   }
-  if (bindingUsesMouse(payload.hotkey)) {
-    showToast("Глобальные шорткаты мыши не поддерживаются Windows", "error");
-    return;
-  }
-  const saved = await persistSettings(payload, "Сохранено");
-  if (saved) {
-    renderHotkey(payload.hotkey);
-    // Reinitialize ElevenLabs streaming if settings changed
-    if (window.ElevenLabsSTT?.init) {
-      await window.ElevenLabsSTT.init(payload);
-    }
+
+  const saved = await persistSettings(payload, "Настройки сохранены");
+  if (saved && window.ElevenLabsSTT?.init) {
+    await window.ElevenLabsSTT.init(payload);
   }
 });
 
+// Revert button
 revertBtn?.addEventListener("click", () => {
   if (!initialSettings) return;
   cancelHotkeyCapture();
-  providerSelect.value = initialSettings.provider ?? "openai";
-  if (llmProviderSelect) llmProviderSelect.value = initialSettings.llm_provider ?? "openai";
-  apiKeyInput.value = initialSettings.api_key ?? "";
-  groqApiKeyInput.value = initialSettings.groq_api_key ?? "";
-  elevenlabsApiKeyInput.value = initialSettings.elevenlabs_api_key ?? "";
-  modelSelect.value = initialSettings.model ?? "gpt-4o-transcribe";
+
+  setSelectedProvider(initialSettings.provider ?? "openai");
   updateProviderFields();
-  renderHotkey(initialSettings.hotkey ?? DEFAULT_HOTKEY);
-  simulateTypingInput.checked = Boolean(initialSettings.simulate_typing);
-  copyToClipboardInput.checked = Boolean(initialSettings.copy_to_clipboard);
-  autoStartInput.checked = Boolean(initialSettings.auto_start);
-  startMinimizedInput.checked = Boolean(initialSettings.start_minimized);
-  useStreamingInput.checked = Boolean(initialSettings.use_streaming);
-  autoTranslateInput.checked = Boolean(initialSettings.auto_translate);
-  targetLanguageSelect.value = initialSettings.target_language ?? "русский";
-  if (useCustomInstructionsInput) {
-    useCustomInstructionsInput.checked = Boolean(initialSettings.use_custom_instructions);
-  }
-  if (customInstructionsInput) {
-    customInstructionsInput.value = initialSettings.custom_instructions ?? "";
-  }
+
+  if (apiKeyInput) apiKeyInput.value = initialSettings.api_key ?? "";
+  if (groqApiKeyInput) groqApiKeyInput.value = initialSettings.groq_api_key ?? "";
+  if (elevenlabsApiKeyInput) elevenlabsApiKeyInput.value = initialSettings.elevenlabs_api_key ?? "";
+  if (modelSelect) modelSelect.value = initialSettings.model ?? "gpt-4o-transcribe";
+
+  renderHotkey(initialSettings.hotkey ?? DEFAULT_HOTKEY, 'main');
+  renderHotkey(initialSettings.translate_hotkey ?? "", 'translate');
+  renderHotkey(initialSettings.toggle_translate_hotkey ?? "", 'toggle');
+
+  if (simulateTypingInput) simulateTypingInput.checked = Boolean(initialSettings.simulate_typing);
+  if (copyToClipboardInput) copyToClipboardInput.checked = Boolean(initialSettings.copy_to_clipboard);
+  if (useStreamingInput) useStreamingInput.checked = Boolean(initialSettings.use_streaming);
+  if (autoStartInput) autoStartInput.checked = Boolean(initialSettings.auto_start);
+  if (startMinimizedInput) startMinimizedInput.checked = Boolean(initialSettings.start_minimized);
+  if (autoUpdateInput) autoUpdateInput.checked = Boolean(initialSettings.auto_update ?? true);
+  if (autoTranslateInput) autoTranslateInput.checked = Boolean(initialSettings.auto_translate);
+  if (targetLanguageSelect) targetLanguageSelect.value = initialSettings.target_language ?? "русский";
+  if (llmProviderSelect) llmProviderSelect.value = initialSettings.llm_provider ?? "groq";
+  if (useCustomInstructionsInput) useCustomInstructionsInput.checked = Boolean(initialSettings.use_custom_instructions);
+  if (customInstructionsInput) customInstructionsInput.value = initialSettings.custom_instructions ?? "";
+
   syncTranslationUi();
   syncCustomInstructionsUi();
   showToast("Изменения отменены");
 });
 
-// Click on hotkey field to start capture
+// Hotkey field clicks
 hotkeyDisplay?.addEventListener("click", () => {
-  dbg("Hotkey field clicked");
-  if (isCapturingHotkey) {
-    cancelHotkeyCapture();
-  } else {
-    beginHotkeyCapture('main');
-  }
+  isCapturingHotkey ? cancelHotkeyCapture() : beginHotkeyCapture('main');
 });
 
 translateHotkeyDisplay?.addEventListener("click", () => {
-  dbg("Translate hotkey field clicked");
-  if (isCapturingHotkey) {
-    cancelHotkeyCapture();
-  } else {
-    beginHotkeyCapture('translate');
-  }
+  isCapturingHotkey ? cancelHotkeyCapture() : beginHotkeyCapture('translate');
 });
 
 toggleTranslateHotkeyDisplay?.addEventListener("click", () => {
-  dbg("Toggle translate hotkey field clicked");
-  if (isCapturingHotkey) {
-    cancelHotkeyCapture();
-  } else {
-    beginHotkeyCapture('toggle');
-  }
+  isCapturingHotkey ? cancelHotkeyCapture() : beginHotkeyCapture('toggle');
 });
 
 // Clear hotkey buttons
 function clearHotkey(target) {
   const elements = getHotkeyElements(target);
-  if (elements.hidden) {
-    elements.hidden.value = "";
-  }
+  if (elements.hidden) elements.hidden.value = "";
   renderHotkey("", target);
-  markFormDirty();
 }
 
-hotkeyClearBtn?.addEventListener("click", (e) => {
-  e.stopPropagation();
-  clearHotkey('main');
+hotkeyClearBtn?.addEventListener("click", (e) => { e.stopPropagation(); clearHotkey('main'); });
+translateHotkeyClearBtn?.addEventListener("click", (e) => { e.stopPropagation(); clearHotkey('translate'); });
+toggleTranslateHotkeyClearBtn?.addEventListener("click", (e) => { e.stopPropagation(); clearHotkey('toggle'); });
+
+// Provider change
+providerRadios.forEach(radio => {
+  radio.addEventListener("change", updateProviderFields);
 });
 
-translateHotkeyClearBtn?.addEventListener("click", (e) => {
-  e.stopPropagation();
-  clearHotkey('translate');
-});
+// Translation toggle
+autoTranslateInput?.addEventListener("change", syncTranslationUi);
 
-toggleTranslateHotkeyClearBtn?.addEventListener("click", (e) => {
-  e.stopPropagation();
-  clearHotkey('toggle');
-});
+// Custom instructions toggle
+useCustomInstructionsInput?.addEventListener("change", syncCustomInstructionsUi);
 
-autoTranslateInput?.addEventListener("change", () => {
-  syncTranslationUi();
-});
-
-useCustomInstructionsInput?.addEventListener("change", () => {
-  syncCustomInstructionsUi();
-});
-
-providerSelect?.addEventListener("change", () => {
-  updateProviderFields();
-});
-
+// Keyboard events for hotkey capture
 window.addEventListener("keydown", (event) => {
-  dbg(`keydown code=${event.code} ctrl=${event.ctrlKey} shift=${event.shiftKey} alt=${event.altKey} meta=${event.metaKey}`);
   if (!isCapturingHotkey) return;
   event.preventDefault();
   event.stopPropagation();
@@ -669,10 +641,7 @@ window.addEventListener("keydown", (event) => {
     cancelHotkeyCapture();
     return;
   }
-
-  if (event.repeat) {
-    return;
-  }
+  if (event.repeat) return;
 
   if (isModifierKey(event.code)) {
     const label = modifierLabelFromCode(event.code);
@@ -685,7 +654,7 @@ window.addEventListener("keydown", (event) => {
 
   const binding = formatKeyboardHotkey(event);
   if (!binding) {
-    showToast("Не удалось распознать клавишу", "error");
+    showToast("Не удалось распознать", "error");
     cancelHotkeyCapture();
     return;
   }
@@ -696,26 +665,20 @@ window.addEventListener("keyup", (event) => {
   if (!isCapturingHotkey) return;
   if (!isModifierKey(event.code)) return;
   const label = modifierLabelFromCode(event.code);
-  if (!label) return;
-  pressedModifiers.delete(label);
+  if (label) pressedModifiers.delete(label);
   updateHotkeyPreview();
 });
 
 window.addEventListener("mousedown", (event) => {
-  dbg(`mousedown button=${event.button}`);
   if (!isCapturingHotkey) return;
-  // Don't capture if clicking on hotkey fields or clear buttons
-  if (event.target === hotkeyDisplay ||
-      event.target === translateHotkeyDisplay ||
-      event.target === toggleTranslateHotkeyDisplay ||
-      event.target === hotkeyClearBtn ||
-      event.target === translateHotkeyClearBtn ||
-      event.target === toggleTranslateHotkeyClearBtn) return;
+  if (event.target === hotkeyDisplay || event.target === translateHotkeyDisplay ||
+      event.target === toggleTranslateHotkeyDisplay || event.target === hotkeyClearBtn ||
+      event.target === translateHotkeyClearBtn || event.target === toggleTranslateHotkeyClearBtn) return;
   event.preventDefault();
   event.stopPropagation();
   const binding = formatMouseHotkey(event);
   if (!binding) {
-    showToast("Не удалось распознать кнопку мыши", "error");
+    showToast("Не удалось распознать", "error");
     cancelHotkeyCapture();
     return;
   }
@@ -723,15 +686,155 @@ window.addEventListener("mousedown", (event) => {
 });
 
 window.addEventListener("blur", () => {
-  if (isCapturingHotkey) {
-    cancelHotkeyCapture();
-  }
+  if (isCapturingHotkey) cancelHotkeyCapture();
 });
+
+// ============================================================================
+// History
+// ============================================================================
+
+async function loadHistory() {
+  if (!invoke || !historyListEl) return;
+  try {
+    const history = await invoke("get_history");
+    renderHistory(history);
+  } catch (err) {
+    console.error("[History] Failed to load:", err);
+  }
+}
+
+function renderHistory(entries) {
+  if (!historyListEl) return;
+
+  if (!entries || entries.length === 0) {
+    historyListEl.innerHTML = '<p class="history-empty">Нет записей</p>';
+    return;
+  }
+
+  historyListEl.innerHTML = entries.map(entry => {
+    const time = formatHistoryTime(entry.timestamp);
+    const text = escapeHtml(entry.original_text);
+    const hasTranslation = entry.translated_text && entry.translated_text !== entry.original_text;
+
+    // Language badges
+    let badges = '';
+    if (entry.source_language) {
+      badges += `<span class="history-entry-lang">${entry.source_language}</span>`;
+    }
+    if (hasTranslation && entry.target_language) {
+      badges += `<span class="history-entry-translated">→ ${entry.target_language}</span>`;
+    }
+
+    return `
+      <div class="history-entry" data-id="${entry.id}">
+        <div class="history-entry-content">
+          <p class="history-entry-text">${text}</p>
+          <div class="history-entry-meta">
+            <span class="history-entry-time">${time}</span>
+            ${badges}
+          </div>
+        </div>
+        <div class="history-entry-actions">
+          <button type="button" class="history-entry-btn copy" title="Копировать" data-text="${escapeAttr(entry.original_text)}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+          <button type="button" class="history-entry-btn delete" title="Удалить" data-id="${entry.id}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add event handlers
+  historyListEl.querySelectorAll('.history-entry-btn.delete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = parseInt(btn.dataset.id, 10);
+      await deleteHistoryEntry(id);
+    });
+  });
+
+  historyListEl.querySelectorAll('.history-entry-btn.copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = btn.dataset.text;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("Скопировано", "success");
+      });
+    });
+  });
+}
+
+function formatHistoryTime(timestamp) {
+  try {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    if (isToday) {
+      return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString('ru-RU', {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+    });
+  } catch { return ''; }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function escapeAttr(text) {
+  return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function deleteHistoryEntry(id) {
+  if (!invoke) return;
+  try {
+    await invoke("delete_history_entry", { id });
+    await loadHistory();
+  } catch (err) {
+    console.error("[History] Failed to delete:", err);
+    showToast("Не удалось удалить", "error");
+  }
+}
+
+async function clearAllHistory() {
+  if (!invoke) return;
+  try {
+    await invoke("clear_history");
+    await loadHistory();
+    showToast("История очищена");
+  } catch (err) {
+    console.error("[History] Failed to clear:", err);
+    showToast("Не удалось очистить", "error");
+  }
+}
+
+clearHistoryBtn?.addEventListener("click", clearAllHistory);
+
+// ============================================================================
+// Initialization
+// ============================================================================
 
 window.addEventListener("DOMContentLoaded", async () => {
   if (!invoke || !listen || !tauriApp) {
     hydrateTauriApis();
   }
+
+  // Initialize tabs
+  initTabs();
+
+  // Initialize password toggles
+  initPasswordToggles();
+
+  // Ping backend
   if (invoke) {
     try {
       const pong = await invoke("ping");
@@ -739,47 +842,45 @@ window.addEventListener("DOMContentLoaded", async () => {
     } catch (e) {
       dbg(`ping failed: ${String(e)}`, "error");
     }
-  } else {
-    dbg("invoke not available at DOMContentLoaded", "warn");
   }
 
-  // Setup ElevenLabs event listeners
+  // Setup ElevenLabs
   if (window.ElevenLabsSTT?.setupEventListeners) {
     window.ElevenLabsSTT.setupEventListeners();
   }
 
+  // Load settings
   await loadSettings();
+
+  // Set version
   if (tauriApp?.getVersion) {
     try {
       const versionEl = document.getElementById("app-version");
-      if (versionEl) {
-        versionEl.textContent = await tauriApp.getVersion();
-      }
+      if (versionEl) versionEl.textContent = await tauriApp.getVersion();
     } catch (error) {
       console.error(error);
     }
   }
 
+  // Setup event listeners
   if (listen) {
     await listen("transcription://status", ({ payload }) => {
       const { phase, message } = payload;
       if (phase === "recording") {
         setStatus("recording", message ?? "Идёт запись...");
-        progressEl.hidden = false;
-        progressEl.removeAttribute("value");
+        if (progressEl) { progressEl.hidden = false; progressEl.removeAttribute("value"); }
       } else if (phase === "transcribing") {
-        setStatus("transcribing", message ?? "Отправка и распознавание...");
-        progressEl.hidden = false;
-        progressEl.value = 0;
+        setStatus("transcribing", message ?? "Распознавание...");
+        if (progressEl) { progressEl.hidden = false; progressEl.value = 0; }
       } else if (phase === "idle") {
-        progressEl.hidden = true;
+        if (progressEl) progressEl.hidden = true;
         setStatus("idle", message ?? "Готово к записи");
       } else if (phase === "error") {
-        progressEl.hidden = true;
+        if (progressEl) progressEl.hidden = true;
         setStatus("error", message ?? "Ошибка");
         showToast(message ?? "Ошибка", "error");
       } else if (phase === "success") {
-        progressEl.hidden = true;
+        if (progressEl) progressEl.hidden = true;
         setStatus("success", message ?? "Готово");
       }
     });
@@ -801,119 +902,28 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
       }
       showToast("Готово", "success");
-      setStatus("success", "Обработка завершена");
-      // Refresh history after transcription completes
+      setStatus("success", "Готово");
       loadHistory();
     });
+
+    await listen("settings://changed", ({ payload }) => {
+      const { auto_translate, target_language } = payload;
+      if (autoTranslateInput && typeof auto_translate === 'boolean') {
+        autoTranslateInput.checked = auto_translate;
+      }
+      if (targetLanguageSelect && target_language) {
+        const options = targetLanguageSelect.options;
+        for (let i = 0; i < options.length; i++) {
+          if (options[i].value.toLowerCase() === target_language.toLowerCase()) {
+            targetLanguageSelect.selectedIndex = i;
+            break;
+          }
+        }
+      }
+      syncTranslationUi();
+    });
   }
 
-  // Load history on startup
+  // Load history
   await loadHistory();
 });
-
-// ============================================================================
-// History Management
-// ============================================================================
-
-const historyListEl = document.getElementById("historyList");
-const clearHistoryBtn = document.getElementById("clearHistoryBtn");
-
-async function loadHistory() {
-  if (!invoke || !historyListEl) return;
-
-  try {
-    const history = await invoke("get_history");
-    renderHistory(history);
-  } catch (err) {
-    console.error("[History] Failed to load:", err);
-  }
-}
-
-function renderHistory(entries) {
-  if (!historyListEl) return;
-
-  if (!entries || entries.length === 0) {
-    historyListEl.innerHTML = '<p class="history-empty">Нет записей</p>';
-    return;
-  }
-
-  historyListEl.innerHTML = entries.map(entry => {
-    const time = formatHistoryTime(entry.timestamp);
-    const text = escapeHtml(entry.original_text);
-    return `
-      <div class="history-entry" data-id="${entry.id}">
-        <div class="history-entry-content">
-          <p class="history-entry-text">${text}</p>
-          <span class="history-entry-time">${time}</span>
-        </div>
-        <button type="button" class="history-entry-delete" title="Удалить" data-id="${entry.id}">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-    `;
-  }).join('');
-
-  // Add delete handlers
-  historyListEl.querySelectorAll('.history-entry-delete').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const id = parseInt(btn.dataset.id, 10);
-      await deleteHistoryEntry(id);
-    });
-  });
-}
-
-function formatHistoryTime(timestamp) {
-  try {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-
-    if (isToday) {
-      return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    }
-    return date.toLocaleDateString('ru-RU', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch {
-    return '';
-  }
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-async function deleteHistoryEntry(id) {
-  if (!invoke) return;
-
-  try {
-    await invoke("delete_history_entry", { id });
-    await loadHistory();
-  } catch (err) {
-    console.error("[History] Failed to delete entry:", err);
-    showToast("Не удалось удалить запись", "error");
-  }
-}
-
-async function clearAllHistory() {
-  if (!invoke) return;
-
-  try {
-    await invoke("clear_history");
-    await loadHistory();
-    showToast("История очищена", "success");
-  } catch (err) {
-    console.error("[History] Failed to clear:", err);
-    showToast("Не удалось очистить историю", "error");
-  }
-}
-
-clearHistoryBtn?.addEventListener("click", clearAllHistory);

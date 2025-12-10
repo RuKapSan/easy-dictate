@@ -12,148 +12,44 @@
 </head>
 
 <body>
-  <main>
-    <header>
-      <h1>Easy Dictate</h1>
-      <p class="subtitle">Голосовое диктование в любой программе</p>
-    </header>
+  <!-- Tab Navigation -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="main">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" x2="12" y1="19" y2="22"/>
+      </svg>
+      Диктовка
+    </button>
+    <button class="tab-btn" data-tab="settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+      Настройки
+    </button>
+    <span class="tab-spacer"></span>
+    <span class="version-badge">v<span id="app-version">-</span></span>
+  </nav>
 
-    <section class="card" id="statusCard">
-      <h2>Статус</h2>
+  <!-- Main Tab: Dictation & History -->
+  <main class="tab-content active" data-tab="main">
+    <!-- Status Section -->
+    <section class="status-section">
       <div class="status-hero">
         <div id="status-orb" class="status-orb idle"></div>
         <div class="status-info">
-          <div class="status-label">Состояние</div>
           <div id="status-text" class="status-text">Готово к записи</div>
+          <div id="status-hint" class="status-hint">Нажмите горячую клавишу для начала</div>
         </div>
-        <span id="status-indicator" class="pill idle" hidden>Ожидает</span>
       </div>
       <progress id="progress" max="1" value="0" hidden></progress>
       <pre id="last-result" class="result" hidden></pre>
     </section>
 
-    <section class="card">
-      <h2>Настройки</h2>
-      <form id="settings-form">
-        <label>
-          Провайдер
-          <select id="provider">
-            <option value="openai">OpenAI</option>
-            <option value="groq" selected>Groq</option>
-            <option value="elevenlabs">ElevenLabs</option>
-          </select>
-        </label>
-        <label id="openai-api-key-label">
-          API ключ OpenAI <span id="openai-api-hint" style="font-size: 0.85em; color: var(--text-muted);"></span>
-          <input type="password" id="apiKey" autocomplete="off" placeholder="sk-..." />
-        </label>
-        <label id="groq-api-key-label" hidden>
-          API ключ Groq
-          <input type="password" id="groqApiKey" autocomplete="off" placeholder="gsk_..." />
-        </label>
-        <label id="elevenlabs-api-key-label" hidden>
-          API ключ ElevenLabs
-          <input type="password" id="elevenlabsApiKey" autocomplete="off" placeholder="sk_..." />
-        </label>
-        <label>
-          Модель
-          <select id="model">
-            <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
-            <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
-            <option value="whisper-1">whisper-1 (fallback)</option>
-            <option value="groq/whisper-large-v3-turbo" selected>Groq Whisper Large v3 Turbo</option>
-            <option value="groq/whisper-large-v3">Groq Whisper Large v3</option>
-          </select>
-        </label>
-        <label class="hotkey-label">
-          Горячая клавиша
-          <div class="hotkey-row">
-            <span id="hotkeyDisplay" class="hotkey-field" tabindex="0" data-placeholder="Кликните для записи" data-empty="true">Кликните для записи</span>
-            <button type="button" class="hotkey-clear" id="hotkeyClear" title="Сбросить">&times;</button>
-            <input type="hidden" id="hotkey" />
-          </div>
-        </label>
-        <label class="hotkey-label">
-          Горячая клавиша для записи с переводом
-          <div class="hotkey-row">
-            <span id="translateHotkeyDisplay" class="hotkey-field" tabindex="0" data-placeholder="Кликните для записи" data-empty="true">Кликните для записи</span>
-            <button type="button" class="hotkey-clear" id="translateHotkeyClear" title="Сбросить">&times;</button>
-            <input type="hidden" id="translateHotkey" />
-          </div>
-          <small class="hotkey-hint">Эта клавиша всегда переводит результат</small>
-        </label>
-        <label class="hotkey-label">
-          Горячая клавиша для переключения перевода
-          <div class="hotkey-row">
-            <span id="toggleTranslateHotkeyDisplay" class="hotkey-field" tabindex="0" data-placeholder="Кликните для записи" data-empty="true">Кликните для записи</span>
-            <button type="button" class="hotkey-clear" id="toggleTranslateHotkeyClear" title="Сбросить">&times;</button>
-            <input type="hidden" id="toggleTranslateHotkey" />
-          </div>
-          <small class="hotkey-hint">Переключает настройку «Переводить результат»</small>
-        </label>
-        <label class="switch-row">
-          <input type="checkbox" id="simulateTyping" />
-          <span>Эмулировать ввод с клавиатуры</span>
-        </label>
-        <label class="switch-row">
-          <input type="checkbox" id="copyToClipboard" />
-          <span>Копировать в буфер обмена</span>
-        </label>
-        <label class="switch-row">
-          <input type="checkbox" id="autoStart" />
-          <span>Автозапуск с системой</span>
-        </label>
-        <label class="switch-row">
-          <input type="checkbox" id="startMinimized" />
-          <span>Запускать в трее</span>
-        </label>
-        <label class="switch-row">
-          <input type="checkbox" id="autoUpdate" checked />
-          <span>Автоматические обновления</span>
-        </label>
-        <label class="switch-row">
-          <input type="checkbox" id="useStreaming" checked />
-          <span>Показывать текст в реальном времени</span>
-        </label>
-        <label class="switch-row translate-row">
-          <input type="checkbox" id="autoTranslate" />
-          <span class="switch-text">
-            <span class="switch-title">Переводить результат</span>
-            <span class="switch-hint">Автоперевод на выбранный язык</span>
-          </span>
-          <select id="targetLanguage" class="inline-select">
-            <option value="русский">На русский</option>
-            <option value="английский">На английский</option>
-          </select>
-        </label>
-        <label id="llm-provider-label" hidden style="margin-left: 52px;">
-          LLM для обработки
-          <select id="llmProvider">
-            <option value="openai">OpenAI GPT-4o-mini</option>
-            <option value="groq" selected>Groq OSS-20B</option>
-          </select>
-        </label>
-        <label class="switch-row">
-          <input type="checkbox" id="useCustomInstructions" />
-          <span class="switch-text">
-            <span class="switch-title">Свои инструкции</span>
-            <span class="switch-hint">Например: «Сделай краткое резюме»</span>
-          </span>
-        </label>
-        <label class="custom-instructions-field" id="customInstructionsWrapper" hidden>
-          Инструкции
-          <textarea id="customInstructions" rows="3"
-            placeholder="Опишите, как обработать текст"></textarea>
-          <small class="field-hint">Выполняются после распознавания и перевода</small>
-        </label>
-        <div class="actions">
-          <button type="button" id="revertBtn">Отменить</button>
-          <button type="submit" id="saveBtn">Сохранить</button>
-        </div>
-      </form>
-    </section>
-
-    <section class="card" id="historyCard">
+    <!-- History Section -->
+    <section class="history-section">
       <div class="section-header">
         <h2>История</h2>
         <button type="button" class="clear-history-btn" id="clearHistoryBtn" title="Очистить историю">
@@ -167,10 +63,236 @@
         <p class="history-empty">Нет записей</p>
       </div>
     </section>
+  </main>
 
-    <footer>
-      <p>v<span id="app-version">-</span></p>
-    </footer>
+  <!-- Settings Tab -->
+  <main class="tab-content" data-tab="settings">
+    <form id="settings-form">
+      <!-- Provider & API Keys Section -->
+      <section class="settings-group">
+        <h3>Провайдер распознавания</h3>
+        <div class="provider-selector">
+          <label class="provider-option">
+            <input type="radio" name="provider" value="openai" />
+            <span class="provider-card">
+              <span class="provider-name">OpenAI</span>
+              <span class="provider-desc">Whisper, GPT-4o</span>
+            </span>
+          </label>
+          <label class="provider-option">
+            <input type="radio" name="provider" value="groq" checked />
+            <span class="provider-card">
+              <span class="provider-name">Groq</span>
+              <span class="provider-desc">Быстро и бесплатно</span>
+            </span>
+          </label>
+          <label class="provider-option">
+            <input type="radio" name="provider" value="elevenlabs" />
+            <span class="provider-card">
+              <span class="provider-name">ElevenLabs</span>
+              <span class="provider-desc">Реалтайм стриминг</span>
+            </span>
+          </label>
+        </div>
+
+        <!-- API Key - shows only for selected provider -->
+        <div class="api-key-field" id="openai-api-key-field">
+          <label>
+            API ключ OpenAI
+            <div class="password-field">
+              <input type="password" id="apiKey" autocomplete="off" placeholder="sk-..." />
+              <button type="button" class="toggle-password" data-target="apiKey" title="Показать/скрыть">
+                <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+          </label>
+        </div>
+        <div class="api-key-field" id="groq-api-key-field" hidden>
+          <label>
+            API ключ Groq
+            <div class="password-field">
+              <input type="password" id="groqApiKey" autocomplete="off" placeholder="gsk_..." />
+              <button type="button" class="toggle-password" data-target="groqApiKey" title="Показать/скрыть">
+                <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+          </label>
+        </div>
+        <div class="api-key-field" id="elevenlabs-api-key-field" hidden>
+          <label>
+            API ключ ElevenLabs
+            <div class="password-field">
+              <input type="password" id="elevenlabsApiKey" autocomplete="off" placeholder="sk_..." />
+              <button type="button" class="toggle-password" data-target="elevenlabsApiKey" title="Показать/скрыть">
+                <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+          </label>
+        </div>
+
+        <label>
+          Модель
+          <select id="model">
+            <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
+            <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
+            <option value="whisper-1">whisper-1 (fallback)</option>
+            <option value="groq/whisper-large-v3-turbo" selected>Groq Whisper Large v3 Turbo</option>
+            <option value="groq/whisper-large-v3">Groq Whisper Large v3</option>
+          </select>
+        </label>
+      </section>
+
+      <!-- Hotkeys Section -->
+      <section class="settings-group">
+        <h3>Горячие клавиши</h3>
+        <div class="hotkeys-grid">
+          <div class="hotkey-item">
+            <span class="hotkey-label-text">Основная</span>
+            <div class="hotkey-row">
+              <span id="hotkeyDisplay" class="hotkey-field" tabindex="0" data-placeholder="Не задано" data-empty="true">Не задано</span>
+              <button type="button" class="hotkey-clear" id="hotkeyClear" title="Сбросить">&times;</button>
+              <input type="hidden" id="hotkey" />
+            </div>
+          </div>
+          <div class="hotkey-item">
+            <span class="hotkey-label-text">С переводом</span>
+            <div class="hotkey-row">
+              <span id="translateHotkeyDisplay" class="hotkey-field" tabindex="0" data-placeholder="Не задано" data-empty="true">Не задано</span>
+              <button type="button" class="hotkey-clear" id="translateHotkeyClear" title="Сбросить">&times;</button>
+              <input type="hidden" id="translateHotkey" />
+            </div>
+          </div>
+          <div class="hotkey-item">
+            <span class="hotkey-label-text">Вкл/выкл перевод</span>
+            <div class="hotkey-row">
+              <span id="toggleTranslateHotkeyDisplay" class="hotkey-field" tabindex="0" data-placeholder="Не задано" data-empty="true">Не задано</span>
+              <button type="button" class="hotkey-clear" id="toggleTranslateHotkeyClear" title="Сбросить">&times;</button>
+              <input type="hidden" id="toggleTranslateHotkey" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Translation Section -->
+      <section class="settings-group translation-group">
+        <h3>Перевод</h3>
+        <label class="switch-row">
+          <input type="checkbox" id="autoTranslate" />
+          <span class="switch-text">
+            <span class="switch-title">Переводить результат</span>
+            <span class="switch-hint">Автоперевод после распознавания</span>
+          </span>
+        </label>
+        <div class="translation-options" id="translationOptions">
+          <div class="inline-fields">
+            <label class="inline-field">
+              Язык
+              <select id="targetLanguage">
+                <option value="русский">Русский</option>
+                <option value="английский">Английский</option>
+                <option value="немецкий">Немецкий</option>
+                <option value="французский">Французский</option>
+                <option value="испанский">Испанский</option>
+              </select>
+            </label>
+            <label class="inline-field">
+              LLM
+              <select id="llmProvider">
+                <option value="openai">OpenAI GPT-4o-mini</option>
+                <option value="groq" selected>Groq Llama</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Custom Instructions Section -->
+      <section class="settings-group">
+        <h3>Инструкции</h3>
+        <label class="switch-row">
+          <input type="checkbox" id="useCustomInstructions" />
+          <span class="switch-text">
+            <span class="switch-title">Свои инструкции</span>
+            <span class="switch-hint">Постобработка текста через LLM</span>
+          </span>
+        </label>
+        <div class="custom-instructions-field" id="customInstructionsWrapper">
+          <textarea id="customInstructions" rows="4"
+            placeholder="Например: Сделай краткое резюме, исправь грамматику, отформатируй как список..."></textarea>
+        </div>
+      </section>
+
+      <!-- Behavior Section -->
+      <section class="settings-group">
+        <h3>Поведение</h3>
+        <div class="switches-grid">
+          <label class="switch-row compact">
+            <input type="checkbox" id="simulateTyping" />
+            <span class="switch-text">
+              <span class="switch-title">Эмуляция ввода</span>
+              <span class="switch-hint">Печатает текст в активное окно</span>
+            </span>
+          </label>
+          <label class="switch-row compact">
+            <input type="checkbox" id="copyToClipboard" />
+            <span class="switch-text">
+              <span class="switch-title">В буфер обмена</span>
+              <span class="switch-hint">Копировать результат</span>
+            </span>
+          </label>
+          <label class="switch-row compact">
+            <input type="checkbox" id="useStreaming" checked />
+            <span class="switch-text">
+              <span class="switch-title">Реалтайм текст</span>
+              <span class="switch-hint">Показывать текст во время записи</span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <!-- System Section -->
+      <section class="settings-group">
+        <h3>Система</h3>
+        <div class="switches-grid">
+          <label class="switch-row compact">
+            <input type="checkbox" id="autoStart" />
+            <span class="switch-text">
+              <span class="switch-title">Автозапуск</span>
+              <span class="switch-hint">Запускать при старте Windows</span>
+            </span>
+          </label>
+          <label class="switch-row compact">
+            <input type="checkbox" id="startMinimized" />
+            <span class="switch-text">
+              <span class="switch-title">Запуск в трее</span>
+              <span class="switch-hint">Сворачивать при старте</span>
+            </span>
+          </label>
+          <label class="switch-row compact">
+            <input type="checkbox" id="autoUpdate" checked />
+            <span class="switch-text">
+              <span class="switch-title">Автообновления</span>
+              <span class="switch-hint">Проверять новые версии</span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Sticky Actions -->
+      <div class="actions-sticky">
+        <button type="button" id="revertBtn">Отменить</button>
+        <button type="submit" id="saveBtn">Сохранить</button>
+      </div>
+    </form>
   </main>
 
   <div id="toast" hidden></div>

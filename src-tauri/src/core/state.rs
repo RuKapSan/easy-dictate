@@ -27,15 +27,29 @@ pub struct HistoryEntry {
     pub timestamp: DateTime<Utc>,
     pub original_text: String,
     pub translated_text: Option<String>,
+    /// Detected source language (e.g., "Russian", "English")
+    #[serde(default)]
+    pub source_language: Option<String>,
+    /// Target language if translated
+    #[serde(default)]
+    pub target_language: Option<String>,
 }
 
 impl HistoryEntry {
-    pub fn new(id: u64, original: String, translated: Option<String>) -> Self {
+    pub fn new(
+        id: u64,
+        original: String,
+        translated: Option<String>,
+        source_language: Option<String>,
+        target_language: Option<String>,
+    ) -> Self {
         Self {
             id,
             timestamp: Utc::now(),
             original_text: original,
             translated_text: translated,
+            source_language,
+            target_language,
         }
     }
 }
@@ -149,9 +163,15 @@ impl AppState {
     }
 
     /// Add a new entry to the history
-    pub async fn add_history_entry(&self, original: String, translated: Option<String>) -> HistoryEntry {
+    pub async fn add_history_entry(
+        &self,
+        original: String,
+        translated: Option<String>,
+        source_language: Option<String>,
+        target_language: Option<String>,
+    ) -> HistoryEntry {
         let id = self.history_id_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let entry = HistoryEntry::new(id, original, translated);
+        let entry = HistoryEntry::new(id, original, translated, source_language, target_language);
 
         let mut history = self.history.write().await;
         history.push(entry.clone());
