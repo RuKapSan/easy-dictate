@@ -94,6 +94,9 @@ const revertBtn = document.getElementById("revertBtn");
 const historyListEl = document.getElementById("historyList");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 
+// UI Language
+const uiLanguageSelect = document.getElementById("uiLanguage");
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -168,7 +171,7 @@ function showToast(message, type = "info") {
 // Settings Persistence
 // ============================================================================
 
-async function persistSettings(payload, successMessage = "Сохранено") {
+async function persistSettings(payload, successMessage = null) {
   dbg(`persistSettings: ${JSON.stringify(payload)}`);
   if (!invoke) {
     dbg("invoke is not available in persistSettings", "error");
@@ -180,13 +183,22 @@ async function persistSettings(payload, successMessage = "Сохранено") {
     initialSettings = { ...payload };
     if (emit) emit('settings://changed', {});
     if (successMessage) showToast(successMessage);
+    else if (successMessage !== false) showToast(t('toast.saved'));
     return true;
   } catch (error) {
     console.error("[PERSIST] save_settings failed:", error);
     dbg(`save_settings failed: ${String(error)}`, "error");
-    showToast("Ошибка при сохранении", "error");
+    showToast(t('toast.error.save'), "error");
     return false;
   }
+}
+
+// Helper function to get translation (uses window.i18n if available)
+function t(key, params = {}) {
+  if (window.i18n && window.i18n.t) {
+    return window.i18n.t(key, params);
+  }
+  return key;
 }
 
 // ============================================================================
@@ -205,11 +217,11 @@ function setStatus(state, text, hint = null) {
 
 function getDefaultHint(state) {
   switch (state) {
-    case 'recording': return 'Отпустите клавишу для завершения';
-    case 'transcribing': return 'Обработка аудио...';
-    case 'success': return 'Текст скопирован';
-    case 'error': return 'Попробуйте ещё раз';
-    default: return 'Нажмите горячую клавишу для начала';
+    case 'recording': return t('status.hint.recording');
+    case 'transcribing': return t('status.hint.transcribing');
+    case 'success': return t('status.hint.success');
+    case 'error': return t('status.hint.error');
+    default: return t('status.hint.ready');
   }
 }
 
@@ -237,7 +249,7 @@ function renderHotkey(value, target = currentCapturingTarget || 'main') {
   if (elements.hidden) elements.hidden.value = normalized;
   if (!elements.display) return;
   if (!normalized) {
-    elements.display.textContent = "Не задано";
+    elements.display.textContent = t('hotkeys.notset');
     elements.display.dataset.empty = "true";
   } else {
     elements.display.textContent = normalized;
@@ -250,7 +262,7 @@ function applyHotkeyRecordingStyles(active, previewText, target = currentCapturi
   if (elements.display) {
     elements.display.classList.toggle("capturing", active);
     if (active) {
-      elements.display.textContent = previewText ?? "Нажмите...";
+      elements.display.textContent = previewText ?? t('hotkeys.press');
       elements.display.dataset.empty = "false";
     }
   }
@@ -287,20 +299,20 @@ function finishHotkeyCapture(binding) {
   const normalized = normalizeHotkeyValue(binding);
   if (normalized) {
     if (!bindingHasMainKey(normalized)) {
-      showToast("Нужна основная клавиша", "error");
+      showToast(t('toast.error.hotkey.key'), "error");
       renderHotkey(hotkeyBeforeCapture, target);
       return;
     }
     if (bindingUsesMouse(normalized)) {
-      showToast("Мышь не поддерживается", "error");
+      showToast(t('toast.error.hotkey.mouse'), "error");
       renderHotkey(hotkeyBeforeCapture, target);
       return;
     }
     renderHotkey(normalized, target);
     const payload = currentSettings();
-    const successMsg = target === 'translate' ? "Клавиша перевода сохранена"
-      : target === 'toggle' ? "Клавиша переключения сохранена"
-      : "Горячая клавиша сохранена";
+    const successMsg = target === 'translate' ? t('toast.hotkey.translate.saved')
+      : target === 'toggle' ? t('toast.hotkey.toggle.saved')
+      : t('toast.hotkey.saved');
     persistSettings(payload, successMsg);
   } else {
     renderHotkey(hotkeyBeforeCapture, target);
@@ -324,7 +336,7 @@ function normalizeModifiers(modifiers) {
 function updateHotkeyPreview() {
   if (!isCapturingHotkey) return;
   const modifiers = normalizeModifiers(Array.from(pressedModifiers));
-  const preview = modifiers.length ? `${modifiers.join("+")} + …` : "Удерживайте...";
+  const preview = modifiers.length ? `${modifiers.join("+")} + …` : t('hotkeys.hold');
   applyHotkeyRecordingStyles(true, preview);
 }
 
@@ -509,7 +521,7 @@ async function loadSettings() {
     }
   } catch (error) {
     console.error(error);
-    showToast("Не удалось загрузить настройки", "error");
+    showToast(t('toast.error.load'), "error");
   }
 }
 
@@ -548,15 +560,15 @@ form?.addEventListener("submit", async (event) => {
 
   const payload = currentSettings();
   if (!payload.hotkey) {
-    showToast("Выберите горячую клавишу", "error");
+    showToast(t('toast.error.hotkey.main'), "error");
     return;
   }
   if (!bindingHasMainKey(payload.hotkey)) {
-    showToast("Нужна основная клавиша", "error");
+    showToast(t('toast.error.hotkey.key'), "error");
     return;
   }
 
-  const saved = await persistSettings(payload, "Настройки сохранены");
+  const saved = await persistSettings(payload, t('toast.settings.saved'));
   if (saved && window.ElevenLabsSTT?.init) {
     await window.ElevenLabsSTT.init(payload);
   }
@@ -593,7 +605,7 @@ revertBtn?.addEventListener("click", () => {
 
   syncTranslationUi();
   syncCustomInstructionsUi();
-  showToast("Изменения отменены");
+  showToast(t('toast.changes.reverted'));
 });
 
 // Hotkey field clicks
@@ -654,7 +666,7 @@ window.addEventListener("keydown", (event) => {
 
   const binding = formatKeyboardHotkey(event);
   if (!binding) {
-    showToast("Не удалось распознать", "error");
+    showToast(t('toast.error.hotkey.recognize'), "error");
     cancelHotkeyCapture();
     return;
   }
@@ -678,7 +690,7 @@ window.addEventListener("mousedown", (event) => {
   event.stopPropagation();
   const binding = formatMouseHotkey(event);
   if (!binding) {
-    showToast("Не удалось распознать", "error");
+    showToast(t('toast.error.hotkey.recognize'), "error");
     cancelHotkeyCapture();
     return;
   }
@@ -707,7 +719,7 @@ function renderHistory(entries) {
   if (!historyListEl) return;
 
   if (!entries || entries.length === 0) {
-    historyListEl.innerHTML = '<p class="history-empty">Нет записей</p>';
+    historyListEl.innerHTML = `<p class="history-empty">${t('history.empty')}</p>`;
     return;
   }
 
@@ -764,7 +776,7 @@ function renderHistory(entries) {
     btn.addEventListener('click', () => {
       const text = btn.dataset.text;
       navigator.clipboard.writeText(text).then(() => {
-        showToast("Скопировано", "success");
+        showToast(t('toast.copied'), "success");
       });
     });
   });
@@ -801,7 +813,7 @@ async function deleteHistoryEntry(id) {
     await loadHistory();
   } catch (err) {
     console.error("[History] Failed to delete:", err);
-    showToast("Не удалось удалить", "error");
+    showToast(t('toast.error.delete'), "error");
   }
 }
 
@@ -810,10 +822,10 @@ async function clearAllHistory() {
   try {
     await invoke("clear_history");
     await loadHistory();
-    showToast("История очищена");
+    showToast(t('toast.history.cleared'));
   } catch (err) {
     console.error("[History] Failed to clear:", err);
-    showToast("Не удалось очистить", "error");
+    showToast(t('toast.error.clear'), "error");
   }
 }
 
@@ -827,6 +839,29 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (!invoke || !listen || !tauriApp) {
     hydrateTauriApis();
   }
+
+  // Initialize i18n
+  if (window.i18n?.initI18n) {
+    window.i18n.initI18n();
+    window.i18n.applyTranslations();
+
+    // Set UI language selector to current language
+    if (uiLanguageSelect) {
+      uiLanguageSelect.value = window.i18n.getLanguage();
+    }
+  }
+
+  // UI language change handler
+  uiLanguageSelect?.addEventListener('change', () => {
+    if (window.i18n?.setLanguage) {
+      window.i18n.setLanguage(uiLanguageSelect.value);
+      // Re-render dynamic content
+      renderHotkey(hotkeyHiddenInput?.value || '', 'main');
+      renderHotkey(translateHotkeyHiddenInput?.value || '', 'translate');
+      renderHotkey(toggleTranslateHotkeyHiddenInput?.value || '', 'toggle');
+      loadHistory();
+    }
+  });
 
   // Initialize tabs
   initTabs();
@@ -867,21 +902,21 @@ window.addEventListener("DOMContentLoaded", async () => {
     await listen("transcription://status", ({ payload }) => {
       const { phase, message } = payload;
       if (phase === "recording") {
-        setStatus("recording", message ?? "Идёт запись...");
+        setStatus("recording", message ?? t('status.recording'));
         if (progressEl) { progressEl.hidden = false; progressEl.removeAttribute("value"); }
       } else if (phase === "transcribing") {
-        setStatus("transcribing", message ?? "Распознавание...");
+        setStatus("transcribing", message ?? t('status.transcribing'));
         if (progressEl) { progressEl.hidden = false; progressEl.value = 0; }
       } else if (phase === "idle") {
         if (progressEl) progressEl.hidden = true;
-        setStatus("idle", message ?? "Готово к записи");
+        setStatus("idle", message ?? t('status.ready'));
       } else if (phase === "error") {
         if (progressEl) progressEl.hidden = true;
-        setStatus("error", message ?? "Ошибка");
-        showToast(message ?? "Ошибка", "error");
+        setStatus("error", message ?? t('status.error'));
+        showToast(message ?? t('toast.error'), "error");
       } else if (phase === "success") {
         if (progressEl) progressEl.hidden = true;
-        setStatus("success", message ?? "Готово");
+        setStatus("success", message ?? t('status.success'));
       }
     });
 
@@ -890,7 +925,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       resultEl.hidden = false;
       resultEl.classList.add("partial");
       resultEl.textContent = payload.text;
-      setStatus("recording", "Распознаю...");
+      setStatus("recording", t('status.transcribing'));
     });
 
     await listen("transcription://complete", ({ payload }) => {
@@ -901,8 +936,8 @@ window.addEventListener("DOMContentLoaded", async () => {
           resultEl.textContent = payload.text;
         }
       }
-      showToast("Готово", "success");
-      setStatus("success", "Готово");
+      showToast(t('status.success'), "success");
+      setStatus("success", t('status.success'));
       loadHistory();
     });
 

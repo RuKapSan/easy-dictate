@@ -785,6 +785,28 @@ textarea {
   transform: translateX(16px);
 }
 
+/* Language Selector */
+.language-selector {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+}
+
+.language-selector span {
+  color: var(--text);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.language-selector select {
+  width: auto;
+  min-width: 120px;
+}
+
 /* Translation Options */
 .translation-options {
   margin-top: 12px;
