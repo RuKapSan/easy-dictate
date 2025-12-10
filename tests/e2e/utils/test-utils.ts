@@ -178,7 +178,8 @@ export class ProblemDetector {
       }
 
       // Check if elements are properly rendered
-      const criticalElements = ['#status-orb', '#settings-form', '#provider'];
+      // Note: #provider was replaced with radio buttons in new UI
+      const criticalElements = ['#status-orb', '#settings-form'];
       for (const selector of criticalElements) {
         const element = await browser.$(selector);
         if (!await element.isExisting()) {

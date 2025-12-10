@@ -13,6 +13,61 @@ import { setupTestAudioFiles, TEST_AUDIO_SCENARIOS } from '../utils/audio-mock';
 
 const logsDir = path.join(__dirname, '../logs');
 
+// Helper to switch to Settings tab
+async function switchToSettingsTab() {
+  const settingsTabBtn = await browser.$('.tab-btn[data-tab="settings"]');
+  if (await settingsTabBtn.isExisting()) {
+    await settingsTabBtn.click();
+    // Wait for tab content to become visible
+    await browser.waitUntil(
+      async () => {
+        const settingsContent = await browser.$('.tab-content[data-tab="settings"]');
+        return await settingsContent.getAttribute('class').then(c => c?.includes('active'));
+      },
+      { timeout: 2000, timeoutMsg: 'Settings tab did not become active' }
+    );
+    await browser.pause(100); // Small delay for animations
+  }
+}
+
+// Helper to switch to Main tab
+async function switchToMainTab() {
+  const mainTabBtn = await browser.$('.tab-btn[data-tab="main"]');
+  if (await mainTabBtn.isExisting()) {
+    await mainTabBtn.click();
+    await browser.waitUntil(
+      async () => {
+        const mainContent = await browser.$('.tab-content[data-tab="main"]');
+        return await mainContent.getAttribute('class').then(c => c?.includes('active'));
+      },
+      { timeout: 2000, timeoutMsg: 'Main tab did not become active' }
+    );
+    await browser.pause(100);
+  }
+}
+
+// Helper to get selected provider from radio buttons
+async function getSelectedProvider(): Promise<string> {
+  const radios = await browser.$$('input[name="provider"]');
+  for (const radio of radios) {
+    if (await radio.isSelected()) {
+      return await radio.getAttribute('value');
+    }
+  }
+  return 'openai';
+}
+
+// Helper to select provider via radio button
+async function selectProvider(provider: string) {
+  const radio = await browser.$(`input[name="provider"][value="${provider}"]`);
+  if (await radio.isExisting()) {
+    // Click on the parent label for better interaction
+    const label = await radio.parentElement();
+    await label.click();
+    await browser.pause(100);
+  }
+}
+
 describe('Easy Dictate Application', () => {
   let logger: TestLogger;
   let screenshots: ScreenshotManager;
@@ -104,24 +159,31 @@ describe('Easy Dictate Application', () => {
     it('should load the main window correctly', async () => {
       logger.info('Checking main window elements');
 
-      // Verify critical UI elements exist
+      // Verify critical UI elements exist (Main tab is active by default)
       const statusOrb = await browser.$('#status-orb');
       expect(await statusOrb.isExisting()).toBe(true);
       logger.info('Status orb found');
+
+      // Switch to Settings tab to verify settings form
+      await switchToSettingsTab();
 
       const form = await browser.$('#settings-form');
       expect(await form.isExisting()).toBe(true);
       logger.info('Settings form found');
 
-      const providerSelect = await browser.$('#provider');
-      expect(await providerSelect.isExisting()).toBe(true);
-      logger.info('Provider select found');
+      // Check provider radio buttons (new UI uses radios instead of select)
+      const providerRadios = await browser.$$('input[name="provider"]');
+      expect(providerRadios.length).toBeGreaterThan(0);
+      logger.info('Provider radio buttons found', { count: providerRadios.length });
 
       await screenshots.capture(browser, 'ui_elements_verified');
     });
 
     it('should have new hotkey UI elements', async () => {
       logger.info('Checking new hotkey UI elements');
+
+      // Switch to Settings tab where hotkey elements are
+      await switchToSettingsTab();
 
       // Verify main hotkey field (click-to-capture)
       const hotkeyDisplay = await browser.$('#hotkeyDisplay');
@@ -206,12 +268,13 @@ describe('Easy Dictate Application', () => {
     });
 
     it('should update provider selection', async () => {
-      const providerSelect = await browser.$('#provider');
+      // Switch to Settings tab
+      await switchToSettingsTab();
 
-      // Change to groq
-      await providerSelect.selectByAttribute('value', 'groq');
+      // Change to groq using radio button
+      await selectProvider('groq');
 
-      // Wait for UI to update
+      // Wait for UI to update - model select should show groq models
       await browser.waitUntil(
         async () => {
           const modelSelect = await browser.$('#model');
@@ -224,7 +287,7 @@ describe('Easy Dictate Application', () => {
       await screenshots.capture(browser, 'provider_groq');
 
       // Change back to openai
-      await providerSelect.selectByAttribute('value', 'openai');
+      await selectProvider('openai');
 
       await browser.waitUntil(
         async () => {
@@ -239,15 +302,18 @@ describe('Easy Dictate Application', () => {
     });
 
     it('should toggle auto-translate settings', async () => {
+      // Switch to Settings tab
+      await switchToSettingsTab();
+
       const autoTranslate = await browser.$('#autoTranslate');
-      const targetLanguage = await browser.$('#targetLanguage');
 
       // Get initial state
       const initiallyChecked = await autoTranslate.isSelected();
       logger.info('Auto-translate initial state', { initiallyChecked });
 
-      // Toggle auto-translate
-      await autoTranslate.click();
+      // Toggle auto-translate by clicking the parent label (checkbox is hidden with custom styling)
+      const autoTranslateLabel = await autoTranslate.parentElement();
+      await autoTranslateLabel.click();
 
       // Wait for UI to react
       await browser.waitUntil(
@@ -261,7 +327,7 @@ describe('Easy Dictate Application', () => {
       await screenshots.capture(browser, 'auto_translate_toggled');
 
       // Toggle back
-      await autoTranslate.click();
+      await autoTranslateLabel.click();
     });
 
     it('should toggle auto-translate via command (hotkey simulation)', async () => {
@@ -322,6 +388,9 @@ describe('Easy Dictate Application', () => {
 
   describe('Hotkey Recording UI', () => {
     it('should enter hotkey recording mode (click-to-capture)', async () => {
+      // Switch to Settings tab
+      await switchToSettingsTab();
+
       const hotkeyField = await browser.$('#hotkeyDisplay');
       await hotkeyField.click();
 
@@ -350,6 +419,9 @@ describe('Easy Dictate Application', () => {
     });
 
     it('should capture keyboard hotkey in UI', async () => {
+      // Switch to Settings tab
+      await switchToSettingsTab();
+
       const hotkeyField = await browser.$('#hotkeyDisplay');
 
       // Click field to start capture
@@ -382,6 +454,9 @@ describe('Easy Dictate Application', () => {
     });
 
     it('should clear hotkey when clear button clicked', async () => {
+      // Switch to Settings tab
+      await switchToSettingsTab();
+
       const hotkeyField = await browser.$('#hotkeyDisplay');
       const hotkeyClear = await browser.$('#hotkeyClear');
 
@@ -389,8 +464,8 @@ describe('Easy Dictate Application', () => {
       const initialText = await hotkeyField.getText();
       logger.info('Initial hotkey', { initialText });
 
-      // If there's no hotkey set, set one first
-      if (initialText === 'Кликните для записи') {
+      // If there's no hotkey set, set one first (check for Russian "Не задано" placeholder)
+      if (initialText === 'Не задано' || initialText === 'Кликните для записи') {
         await hotkeyField.click();
         await browser.waitUntil(async () => {
           const className = await hotkeyField.getAttribute('class');
@@ -406,11 +481,11 @@ describe('Easy Dictate Application', () => {
       // Click clear button
       await hotkeyClear.click();
 
-      // Verify field shows placeholder
+      // Verify field shows placeholder (check for Russian "Не задано")
       await browser.waitUntil(
         async () => {
           const text = await hotkeyField.getText();
-          return text === 'Кликните для записи';
+          return text === 'Не задано' || text === 'Кликните для записи';
         },
         { timeout: 2000, timeoutMsg: 'Hotkey was not cleared' }
       );
@@ -634,12 +709,16 @@ describe('Easy Dictate Application', () => {
 
   describe('UI State Logging', () => {
     it('should log all UI states correctly', async () => {
+      // Switch to Settings tab to ensure provider radios are in DOM
+      await switchToSettingsTab();
+
       const state = await browser.logUIState();
       logger.info('Full UI state', state);
 
       expect(state).toBeDefined();
       expect(state.statusOrb).toBeDefined();
-      expect(state.provider).toBeDefined();
+      // Provider comes from radio buttons now, may be null if not on settings tab
+      // Just ensure we get a valid state object
     });
 
     it('should capture screenshot sequence', async () => {

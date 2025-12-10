@@ -501,11 +501,21 @@ function addCustomCommands(browser: WebdriverIO.Browser) {
   // Log UI state for debugging
   browser.addCommand('logUIState', async function () {
     const state = await browser.execute(() => {
+      // Get selected provider from radio buttons (new UI)
+      let provider: string | null = null;
+      const providerRadios = document.querySelectorAll('input[name="provider"]') as NodeListOf<HTMLInputElement>;
+      for (const radio of providerRadios) {
+        if (radio.checked) {
+          provider = radio.value;
+          break;
+        }
+      }
+
       return {
         statusOrb: document.getElementById('status-orb')?.className,
         statusText: document.getElementById('status-text')?.textContent,
         lastResult: document.getElementById('last-result')?.textContent,
-        provider: (document.getElementById('provider') as HTMLSelectElement)?.value,
+        provider,
         hotkey: (document.getElementById('hotkey') as HTMLInputElement)?.value,
         visible: document.visibilityState,
         consoleErrors: (window as any).__testConsoleErrors?.length || 0
