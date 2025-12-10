@@ -82,8 +82,8 @@ export const config: Options.Testrunner = {
     'spec',
     ['allure', {
       outputDir: path.join(__dirname, 'allure-results'),
-      disableWebdriverStepsReporting: false,
-      disableWebdriverScreenshotsReporting: false,
+      disableWebdriverStepsReporting: true,
+      disableWebdriverScreenshotsReporting: true, // Disable to avoid "no active test" errors
     }],
     ['json', {
       outputDir: logsDir,

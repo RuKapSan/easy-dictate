@@ -14,9 +14,16 @@ use super::{
 
 pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
     let shortcuts: State<'_, GlobalShortcut<tauri::Wry>> = app.state();
-    if let Err(e) = shortcuts.unregister_all() {
-        log::warn!("[Hotkey] Failed to unregister shortcuts: {}", e);
+
+    // Unregister all existing shortcuts first
+    // Log the result but continue even on failure (some hotkeys might not be registered)
+    match shortcuts.unregister_all() {
+        Ok(_) => log::info!("[Hotkey] Unregistered all existing shortcuts"),
+        Err(e) => log::warn!("[Hotkey] Failed to unregister shortcuts: {}", e),
     }
+
+    // Small delay to ensure OS releases the hotkey handles (Windows quirk)
+    std::thread::sleep(std::time::Duration::from_millis(50));
 
     // Register main hotkey (respects auto_translate setting)
     let hotkey = settings.normalized_hotkey();
