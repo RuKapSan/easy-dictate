@@ -16,6 +16,7 @@ pub enum CommandError {
     Lock(String),
 
     #[error("{0}")]
+    #[allow(dead_code)]
     NotFound(String),
 
     #[error("{0}")]

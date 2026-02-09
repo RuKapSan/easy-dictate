@@ -94,9 +94,9 @@ jobs:
             echo "tauri-driver already installed"
           fi
 
-      - name: Build Tauri app (release)
+      - name: Build Tauri app (debug, for test commands)
         working-directory: src-tauri
-        run: cargo tauri build
+        run: cargo tauri build --debug
 
       - name: Run E2E tests
         if: matrix.platform.run-e2e
