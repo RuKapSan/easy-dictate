@@ -281,11 +281,11 @@ jobs:
           MAC_INTEL_DMG_SIG=$(read_sig "$MAC_INTEL_DMG")
           MAC_ARM_DMG_SIG=$(read_sig "$MAC_ARM_DMG")
 
-          # Get base names for URLs
-          WIN_MSI_NAME=$(basename "$WIN_MSI")
-          LINUX_APPIMAGE_NAME=$(basename "$LINUX_APPIMAGE")
-          MAC_INTEL_DMG_NAME=$(basename "$MAC_INTEL_DMG")
-          MAC_ARM_DMG_NAME=$(basename "$MAC_ARM_DMG")
+          # Get base names for URLs (GitHub replaces spaces with dots in asset names)
+          WIN_MSI_NAME=$(basename "$WIN_MSI" | tr ' ' '.')
+          LINUX_APPIMAGE_NAME=$(basename "$LINUX_APPIMAGE" | tr ' ' '.')
+          MAC_INTEL_DMG_NAME=$(basename "$MAC_INTEL_DMG" | tr ' ' '.')
+          MAC_ARM_DMG_NAME=$(basename "$MAC_ARM_DMG" | tr ' ' '.')
 
           # Generate latest.json for Tauri updater
           cat > latest.json << EOF
