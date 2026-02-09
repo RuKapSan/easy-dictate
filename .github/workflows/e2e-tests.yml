@@ -123,9 +123,8 @@ jobs:
         working-directory: tests/e2e
         run: npm test
         env:
-          NATIVE_DRIVER_PATH: C:\SeleniumWebDrivers\EdgeDriver\msedgedriver.exe
-        env:
           CI: true
+          NATIVE_DRIVER_PATH: C:\SeleniumWebDrivers\EdgeDriver\msedgedriver.exe
 
       - name: Upload E2E screenshots
         if: matrix.platform.run-e2e && always()
