@@ -1143,6 +1143,33 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
+  // Check for updates button
+  const checkUpdatesBtn = document.getElementById("checkUpdatesBtn");
+  const updateStatusEl = document.getElementById("updateStatus");
+  if (checkUpdatesBtn && invoke) {
+    checkUpdatesBtn.addEventListener("click", async () => {
+      checkUpdatesBtn.classList.add("checking");
+      updateStatusEl.hidden = true;
+      try {
+        const newVersion = await invoke("check_for_updates");
+        updateStatusEl.hidden = false;
+        if (newVersion) {
+          updateStatusEl.className = "update-status update-available";
+          updateStatusEl.textContent = `v${newVersion} ${t('update.available')}`;
+        } else {
+          updateStatusEl.className = "update-status up-to-date";
+          updateStatusEl.textContent = t('update.uptodate');
+        }
+      } catch (err) {
+        updateStatusEl.hidden = false;
+        updateStatusEl.className = "update-status";
+        updateStatusEl.textContent = errMsg(err);
+      } finally {
+        checkUpdatesBtn.classList.remove("checking");
+      }
+    });
+  }
+
   // Setup event listeners (store unlisten functions for cleanup)
   const unlistenFns = [];
 

@@ -644,3 +644,36 @@ pub async fn show_overlay_no_focus(app: AppHandle) -> CmdResult {
     }
     Ok(())
 }
+
+// ============================================================================
+// Updater Commands
+// ============================================================================
+
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> CmdResult<Option<String>> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = app
+        .updater_builder()
+        .build()
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            tracing::info!(
+                "[Updater] Update available: {} -> {}",
+                update.current_version,
+                update.version
+            );
+            Ok(Some(update.version.to_string()))
+        }
+        Ok(None) => {
+            tracing::info!("[Updater] App is up to date");
+            Ok(None)
+        }
+        Err(e) => {
+            tracing::warn!("[Updater] Check failed: {}", e);
+            Err(CommandError::Io(format!("Update check failed: {}", e)))
+        }
+    }
+}

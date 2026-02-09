@@ -1,0 +1,9 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-check-for-updates",
+      "description": "Allow calling check_for_updates",
+      "commands": { "allow": ["check_for_updates"], "deny": [] }
+    }
+  ]
+}

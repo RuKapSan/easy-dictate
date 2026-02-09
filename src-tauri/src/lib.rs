@@ -182,6 +182,7 @@ pub fn run() {
             core::commands::elevenlabs_streaming_send_chunk,
             core::commands::elevenlabs_streaming_is_connected,
             core::commands::show_overlay_no_focus,
+            core::commands::check_for_updates,
             // History commands
             core::commands::get_history,
             core::commands::clear_history,

@@ -110,6 +110,10 @@ const translations = {
     'system.autoupdate.hint': 'Проверять новые версии',
     'system.language': 'Язык интерфейса',
 
+    // Updates
+    'update.available': 'доступна',
+    'update.uptodate': 'Актуальная версия',
+
     // Actions
     'actions.revert': 'Отменить',
     'actions.save': 'Сохранить',
@@ -242,6 +246,10 @@ const translations = {
     'system.autoupdate': 'Auto-update',
     'system.autoupdate.hint': 'Check for new versions',
     'system.language': 'Interface language',
+
+    // Updates
+    'update.available': 'available',
+    'update.uptodate': 'Up to date',
 
     // Actions
     'actions.revert': 'Revert',

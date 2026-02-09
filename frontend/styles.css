@@ -116,6 +116,34 @@ body {
   border-radius: 20px;
 }
 
+.check-updates-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+.check-updates-btn:hover { color: var(--accent-primary); }
+.check-updates-btn.checking svg { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.update-status {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.update-status.up-to-date {
+  color: var(--success);
+}
+.update-status.update-available {
+  color: var(--accent-primary);
+  background: rgba(var(--accent-primary-rgb, 99,102,241), 0.12);
+}
+
 /* Tab Content */
 .tab-content {
   display: none;
