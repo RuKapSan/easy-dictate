@@ -677,3 +677,43 @@ pub async fn check_for_updates(app: AppHandle) -> CmdResult<Option<String>> {
         }
     }
 }
+
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> CmdResult<()> {
+    use tauri::Emitter;
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = app
+        .updater_builder()
+        .build()
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| CommandError::Io(format!("Update check failed: {}", e)))?
+        .ok_or_else(|| CommandError::Io("No update available".into()))?;
+
+    let version = update.version.to_string();
+    tracing::info!("[Updater] Downloading update v{}...", version);
+
+    update
+        .download_and_install(
+            |chunk, total| {
+                tracing::debug!(
+                    "[Updater] Downloaded {} of {} bytes",
+                    chunk,
+                    total.unwrap_or(0)
+                );
+            },
+            || {
+                tracing::info!("[Updater] Download finished, installing...");
+            },
+        )
+        .await
+        .map_err(|e| CommandError::Io(format!("Update install failed: {}", e)))?;
+
+    tracing::info!("[Updater] Update v{} installed. Restart required.", version);
+    let _ = app.emit("update://installed", &version);
+    Ok(())
+}

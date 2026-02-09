@@ -1146,17 +1146,41 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Check for updates button
   const checkUpdatesBtn = document.getElementById("checkUpdatesBtn");
   const updateStatusEl = document.getElementById("updateStatus");
+  const installUpdateBtn = document.getElementById("installUpdateBtn");
+
+  function showUpdateAvailable(version) {
+    if (updateStatusEl) {
+      updateStatusEl.hidden = false;
+      updateStatusEl.className = "update-status update-available";
+      updateStatusEl.textContent = `v${version} ${t('update.available')}`;
+    }
+    if (installUpdateBtn) {
+      installUpdateBtn.hidden = false;
+      installUpdateBtn.disabled = false;
+      installUpdateBtn.textContent = t('update.install');
+    }
+  }
+
+  function showUpdateInstalled(version) {
+    if (updateStatusEl) {
+      updateStatusEl.hidden = false;
+      updateStatusEl.className = "update-status update-installed";
+      updateStatusEl.textContent = `v${version} — ${t('update.restart')}`;
+    }
+    if (installUpdateBtn) installUpdateBtn.hidden = true;
+  }
+
   if (checkUpdatesBtn && invoke) {
     checkUpdatesBtn.addEventListener("click", async () => {
       checkUpdatesBtn.classList.add("checking");
       updateStatusEl.hidden = true;
+      if (installUpdateBtn) installUpdateBtn.hidden = true;
       try {
         const newVersion = await invoke("check_for_updates");
-        updateStatusEl.hidden = false;
         if (newVersion) {
-          updateStatusEl.className = "update-status update-available";
-          updateStatusEl.textContent = `v${newVersion} ${t('update.available')}`;
+          showUpdateAvailable(newVersion);
         } else {
+          updateStatusEl.hidden = false;
           updateStatusEl.className = "update-status up-to-date";
           updateStatusEl.textContent = t('update.uptodate');
         }
@@ -1166,6 +1190,23 @@ window.addEventListener("DOMContentLoaded", async () => {
         updateStatusEl.textContent = errMsg(err);
       } finally {
         checkUpdatesBtn.classList.remove("checking");
+      }
+    });
+  }
+
+  if (installUpdateBtn && invoke) {
+    installUpdateBtn.addEventListener("click", async () => {
+      installUpdateBtn.disabled = true;
+      installUpdateBtn.textContent = t('update.installing');
+      try {
+        await invoke("install_update");
+      } catch (err) {
+        installUpdateBtn.disabled = false;
+        installUpdateBtn.textContent = t('update.install');
+        if (updateStatusEl) {
+          updateStatusEl.className = "update-status";
+          updateStatusEl.textContent = errMsg(err);
+        }
       }
     });
   }
@@ -1218,21 +1259,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // Auto-update notifications
     unlistenFns.push(await listen("update://available", ({ payload: version }) => {
-      const updateStatusEl = document.getElementById("updateStatus");
-      if (updateStatusEl) {
-        updateStatusEl.hidden = false;
-        updateStatusEl.className = "update-status update-available";
-        updateStatusEl.textContent = `v${version} ${t('update.available')}`;
-      }
+      showUpdateAvailable(version);
     }));
 
     unlistenFns.push(await listen("update://installed", ({ payload: version }) => {
-      const updateStatusEl = document.getElementById("updateStatus");
-      if (updateStatusEl) {
-        updateStatusEl.hidden = false;
-        updateStatusEl.className = "update-status update-installed";
-        updateStatusEl.textContent = `v${version} — ${t('update.restart')}`;
-      }
+      showUpdateInstalled(version);
     }));
 
     unlistenFns.push(await listen("settings://changed", ({ payload }) => {

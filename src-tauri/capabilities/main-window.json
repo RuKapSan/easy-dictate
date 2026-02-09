@@ -29,6 +29,7 @@
     "allow-elevenlabs-streaming-is-connected",
     "allow-show-overlay-no-focus",
     "allow-check-for-updates",
+    "allow-install-update",
     "allow-get-history",
     "allow-clear-history",
     "allow-delete-history-entry",

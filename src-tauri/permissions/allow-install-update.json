@@ -1,0 +1,9 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-install-update",
+      "description": "Allow calling install_update",
+      "commands": { "allow": ["install_update"], "deny": [] }
+    }
+  ]
+}

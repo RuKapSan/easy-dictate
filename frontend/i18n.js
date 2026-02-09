@@ -113,6 +113,8 @@ const translations = {
     // Updates
     'update.available': 'доступна',
     'update.uptodate': 'Актуальная версия',
+    'update.install': 'Обновить',
+    'update.installing': 'Обновление...',
     'update.restart': 'перезапустите для обновления',
 
     // Actions
@@ -251,6 +253,8 @@ const translations = {
     // Updates
     'update.available': 'available',
     'update.uptodate': 'Up to date',
+    'update.install': 'Update',
+    'update.installing': 'Updating...',
     'update.restart': 'restart to update',
 
     // Actions
