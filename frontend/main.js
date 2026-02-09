@@ -1216,6 +1216,25 @@ window.addEventListener("DOMContentLoaded", async () => {
       loadHistory();
     }));
 
+    // Auto-update notifications
+    unlistenFns.push(await listen("update://available", ({ payload: version }) => {
+      const updateStatusEl = document.getElementById("updateStatus");
+      if (updateStatusEl) {
+        updateStatusEl.hidden = false;
+        updateStatusEl.className = "update-status update-available";
+        updateStatusEl.textContent = `v${version} ${t('update.available')}`;
+      }
+    }));
+
+    unlistenFns.push(await listen("update://installed", ({ payload: version }) => {
+      const updateStatusEl = document.getElementById("updateStatus");
+      if (updateStatusEl) {
+        updateStatusEl.hidden = false;
+        updateStatusEl.className = "update-status update-installed";
+        updateStatusEl.textContent = `v${version} — ${t('update.restart')}`;
+      }
+    }));
+
     unlistenFns.push(await listen("settings://changed", ({ payload }) => {
       const { auto_translate, target_language } = payload;
       if (autoTranslateInput && typeof auto_translate === 'boolean') {

@@ -143,6 +143,9 @@ body {
   color: var(--accent-primary);
   background: rgba(var(--accent-primary-rgb, 99,102,241), 0.12);
 }
+.update-status.update-installed {
+  color: var(--success);
+}
 
 /* Tab Content */
 .tab-content {

@@ -124,10 +124,11 @@ pub fn run() {
                     match update_handle.updater_builder().build() {
                     Ok(updater) => match updater.check().await {
                         Ok(Some(update)) => {
-                            tracing::info!("[Updater] Update available: {} -> {}", update.current_version, update.version);
-                            if let Some(date) = &update.date {
-                                tracing::info!("[Updater] Update date: {}", date);
-                            }
+                            let new_version = update.version.to_string();
+                            tracing::info!("[Updater] Update available: {} -> {}", update.current_version, new_version);
+
+                            // Notify frontend that update is available
+                            let _ = update_handle.emit("update://available", &new_version);
 
                             // Auto-download and install the update
                             match update.download_and_install(|chunk, total| {
@@ -137,7 +138,7 @@ pub fn run() {
                             }).await {
                                 Ok(_) => {
                                     tracing::info!("[Updater] Update installed successfully. Restart required.");
-                                    // Note: App will restart automatically on next launch
+                                    let _ = update_handle.emit("update://installed", &new_version);
                                 }
                                 Err(e) => tracing::error!("[Updater] Failed to download/install update: {}", e),
                             }

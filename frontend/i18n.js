@@ -113,6 +113,7 @@ const translations = {
     // Updates
     'update.available': 'доступна',
     'update.uptodate': 'Актуальная версия',
+    'update.restart': 'перезапустите для обновления',
 
     // Actions
     'actions.revert': 'Отменить',
@@ -250,6 +251,7 @@ const translations = {
     // Updates
     'update.available': 'available',
     'update.uptodate': 'Up to date',
+    'update.restart': 'restart to update',
 
     // Actions
     'actions.revert': 'Revert',
