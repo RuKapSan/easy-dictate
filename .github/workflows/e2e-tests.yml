@@ -114,9 +114,9 @@ jobs:
           Copy-Item "$env:TEMP\edgedriver\msedgedriver.exe" -Destination "C:\Windows\msedgedriver.exe" -Force
           msedgedriver --version
 
-      - name: Build Tauri app (debug, for test commands)
+      - name: Build Tauri app
         working-directory: src-tauri
-        run: cargo tauri build --debug
+        run: cargo tauri build ${{ matrix.platform.run-e2e && '--debug' || '' }}
 
       - name: Run E2E tests
         if: matrix.platform.run-e2e
@@ -164,9 +164,5 @@ jobs:
         with:
           name: build-${{ matrix.platform.target }}
           path: |
-            src-tauri/target/release/bundle/
-            src-tauri/target/release/*.exe
-            src-tauri/target/release/*.app
-            src-tauri/target/release/*.AppImage
-            src-tauri/target/release/*.deb
+            src-tauri/target/${{ matrix.platform.run-e2e && 'debug' || 'release' }}/bundle/
           retention-days: 7
