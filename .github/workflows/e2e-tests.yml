@@ -101,7 +101,7 @@ jobs:
           $edgePath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
           $edgeVersion = (Get-Item $edgePath).VersionInfo.FileVersion
           Write-Host "Edge version: $edgeVersion"
-          $url = "https://msedgedriver.azureedge.net/$edgeVersion/edgedriver_win64.zip"
+          $url = "https://msedgedriver.microsoft.com/$edgeVersion/edgedriver_win64.zip"
           Write-Host "Downloading msedgedriver from: $url"
           Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\edgedriver.zip"
           Expand-Archive -Path "$env:TEMP\edgedriver.zip" -DestinationPath "$env:TEMP\edgedriver" -Force
