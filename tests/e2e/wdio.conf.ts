@@ -62,9 +62,9 @@ export const config: Options.Testrunner = {
     maxInstances: 1,
     browserName: 'wry',
     'tauri:options': {
-      // Use release build which has embedded frontend assets
-      // Debug builds use devUrl which requires a running dev server
-      application: process.env.TAURI_APP_PATH || path.join(__dirname, '../../src-tauri/target/release/app.exe'),
+      // Debug builds include test commands (cfg(debug_assertions))
+      // CI sets --debug flag so binary is in target/debug/
+      application: process.env.TAURI_APP_PATH || path.join(__dirname, '../../src-tauri/target/debug/app.exe'),
       args: []
     }
   } as any],
