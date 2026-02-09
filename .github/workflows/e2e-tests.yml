@@ -123,6 +123,8 @@ jobs:
         working-directory: tests/e2e
         run: npm test
         env:
+          NATIVE_DRIVER_PATH: C:\SeleniumWebDrivers\EdgeDriver\msedgedriver.exe
+        env:
           CI: true
 
       - name: Upload E2E screenshots

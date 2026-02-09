@@ -114,10 +114,16 @@ export const config: Options.Testrunner = {
     console.log('🚀 Starting tauri-driver on port 4444...');
 
     const tauriDriverPath = process.env.TAURI_DRIVER_PATH || 'tauri-driver';
+    const nativeDriver = process.env.NATIVE_DRIVER_PATH;
 
     // Spawn tauri-driver on port 4444
-    // tauri-driver will automatically manage msedgedriver internally
-    tauriDriver = spawn(tauriDriverPath, ['--port', '4444'], {
+    // Use --native-driver to specify msedgedriver path when available (CI)
+    const args = ['--port', '4444'];
+    if (nativeDriver) {
+      args.push('--native-driver', nativeDriver);
+      console.log(`Using native driver: ${nativeDriver}`);
+    }
+    tauriDriver = spawn(tauriDriverPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: true
     });
