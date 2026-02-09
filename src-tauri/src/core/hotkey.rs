@@ -4,7 +4,10 @@ use anyhow::{anyhow, Result};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcut, ShortcutState};
 
-use crate::{audio::RecordingSession, settings::{AppSettings, TranscriptionProvider}};
+use crate::{
+    audio::RecordingSession,
+    settings::{AppSettings, TranscriptionProvider},
+};
 
 use super::{
     events::{emit_error, emit_settings_changed, emit_status, StatusPhase},
@@ -18,8 +21,8 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
     // Unregister all existing shortcuts first
     // Log the result but continue even on failure (some hotkeys might not be registered)
     match shortcuts.unregister_all() {
-        Ok(_) => log::info!("[Hotkey] Unregistered all existing shortcuts"),
-        Err(e) => log::warn!("[Hotkey] Failed to unregister shortcuts: {}", e),
+        Ok(_) => tracing::info!("[Hotkey] Unregistered all existing shortcuts"),
+        Err(e) => tracing::warn!("[Hotkey] Failed to unregister shortcuts: {}", e),
     }
 
     // Longer delay to ensure OS releases the hotkey handles (Windows quirk)
@@ -41,9 +44,13 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
             }
         },
     ) {
-        Ok(_) => log::info!("[Hotkey] Registered main hotkey: {}", hotkey_clone),
+        Ok(_) => tracing::info!("[Hotkey] Registered main hotkey: {}", hotkey_clone),
         Err(e) => {
-            log::error!("[Hotkey] Failed to register main hotkey {}: {}", hotkey_clone, e);
+            tracing::error!(
+                "[Hotkey] Failed to register main hotkey {}: {}",
+                hotkey_clone,
+                e
+            );
             errors.push(format!("Main hotkey '{}': {}", hotkey_clone, e));
         }
     }
@@ -63,10 +70,20 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
                 }
             },
         ) {
-            Ok(_) => log::info!("[Hotkey] Registered translate hotkey: {}", translate_hotkey_clone),
+            Ok(_) => tracing::info!(
+                "[Hotkey] Registered translate hotkey: {}",
+                translate_hotkey_clone
+            ),
             Err(e) => {
-                log::error!("[Hotkey] Failed to register translate hotkey {}: {}", translate_hotkey_clone, e);
-                errors.push(format!("Translate hotkey '{}': {}", translate_hotkey_clone, e));
+                tracing::error!(
+                    "[Hotkey] Failed to register translate hotkey {}: {}",
+                    translate_hotkey_clone,
+                    e
+                );
+                errors.push(format!(
+                    "Translate hotkey '{}': {}",
+                    translate_hotkey_clone, e
+                ));
             }
         }
     }
@@ -83,22 +100,32 @@ pub fn rebind_hotkey(app: &AppHandle, settings: &AppSettings) -> Result<()> {
                 }
             },
         ) {
-            Ok(_) => log::info!("[Hotkey] Registered toggle translate hotkey: {}", toggle_hotkey_clone),
+            Ok(_) => tracing::info!(
+                "[Hotkey] Registered toggle translate hotkey: {}",
+                toggle_hotkey_clone
+            ),
             Err(e) => {
-                log::error!("[Hotkey] Failed to register toggle translate hotkey {}: {}", toggle_hotkey_clone, e);
+                tracing::error!(
+                    "[Hotkey] Failed to register toggle translate hotkey {}: {}",
+                    toggle_hotkey_clone,
+                    e
+                );
                 errors.push(format!("Toggle hotkey '{}': {}", toggle_hotkey_clone, e));
             }
         }
     }
 
     // Return error only if ALL hotkeys failed
-    if !errors.is_empty() && errors.len() >= 1 {
+    if !errors.is_empty() {
         // Log all errors but only fail if main hotkey failed (it's required)
         if errors.iter().any(|e| e.starts_with("Main hotkey")) {
             return Err(anyhow!("Failed to register hotkeys: {}", errors.join("; ")));
         }
         // Non-critical hotkeys failed - log warning but continue
-        log::warn!("[Hotkey] Some optional hotkeys failed to register: {}", errors.join("; "));
+        tracing::warn!(
+            "[Hotkey] Some optional hotkeys failed to register: {}",
+            errors.join("; ")
+        );
     }
 
     Ok(())
@@ -123,20 +150,31 @@ pub fn handle_toggle_translate_hotkey(app: &AppHandle) {
 
     tauri::async_runtime::spawn(async move {
         let state: State<'_, AppState> = app_clone.state();
-        let mut settings = state.current_settings().await;
-        settings.auto_translate = !settings.auto_translate;
 
-        // Persist the toggle
+        // Atomic read-modify-write under exclusive lock to prevent TOCTOU race
+        let settings = state
+            .update_settings(|s| {
+                s.auto_translate = !s.auto_translate;
+            })
+            .await;
+
         if let Err(e) = state.persist_settings(&settings).await {
             emit_error(&app_clone, &format!("Failed to save settings: {}", e));
             return;
         }
-        state.replace_settings(settings.clone()).await;
 
-        log::info!("[Toggle Hotkey] Auto-translate now: {} (target: {})", settings.auto_translate, settings.target_language);
+        tracing::info!(
+            "[Toggle Hotkey] Auto-translate now: {} (target: {})",
+            settings.auto_translate,
+            settings.target_language
+        );
 
         // Emit settings changed event for UI sync
-        emit_settings_changed(&app_clone, settings.auto_translate, &settings.target_language);
+        emit_settings_changed(
+            &app_clone,
+            settings.auto_translate,
+            &settings.target_language,
+        );
 
         // Emit status update with target language info
         let message = if settings.auto_translate {
@@ -152,14 +190,14 @@ pub fn handle_toggle_translate_hotkey(app: &AppHandle) {
 async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> Result<()> {
     let state: State<'_, AppState> = app.state();
 
-    // Store force_translate flag for this transcription session
-    state.set_force_translate(force_translate);
+    // Start a new session — if force_translate, bind it to this session ID
+    let _session_id = state.start_session(force_translate);
 
     // Get settings once at the beginning
     let settings = state.current_settings().await;
     let is_streaming_connected = state.elevenlabs_streaming().is_connected().await;
 
-    log::info!(
+    tracing::info!(
         "[Hotkey] Pressed. Provider: {:?}, Streaming connected: {}",
         settings.provider,
         is_streaming_connected
@@ -169,7 +207,7 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
         let is_committing = state.elevenlabs_streaming().is_committing().await;
 
         if !is_streaming_connected || is_committing {
-            log::info!(
+            tracing::info!(
                 "[Hotkey] Preparing clean session (connected: {}, committing: {})",
                 is_streaming_connected,
                 is_committing
@@ -181,7 +219,7 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
             if let Some((api_key, sample_rate, language_code)) =
                 state.elevenlabs_streaming().get_last_config().await
             {
-                log::info!(
+                tracing::info!(
                     "[Hotkey] Reconnecting with last config: rate={}, lang={}",
                     sample_rate,
                     language_code
@@ -196,27 +234,27 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
                 .await
                 {
                     Ok(()) => {
-                        log::info!("[Hotkey] Reconnection with last config successful");
+                        tracing::info!("[Hotkey] Reconnection with last config successful");
                         connected = true;
                     }
                     Err(e) => {
-                        log::error!("[Hotkey] Reconnection with last config failed: {}", e);
+                        tracing::error!("[Hotkey] Reconnection with last config failed: {}", e);
                         connected = false;
                     }
                 }
             } else {
-                log::info!("[Hotkey] No last config available, will use settings fallback");
+                tracing::info!("[Hotkey] No last config available, will use settings fallback");
             }
 
             // Fallback to settings if no last config or reconnection failed
             if !connected {
                 let api_key = settings.elevenlabs_api_key.trim().to_string();
                 if api_key.is_empty() {
-                    log::warn!(
+                    tracing::warn!(
                         "[Hotkey] ElevenLabs API key is empty; falling back to standard recording."
                     );
                 } else {
-                    log::info!("[Hotkey] Using settings fallback to connect");
+                    tracing::info!("[Hotkey] Using settings fallback to connect");
                     match crate::core::commands::elevenlabs_streaming_connect(
                         app.clone(),
                         state.clone(),
@@ -227,11 +265,11 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
                     .await
                     {
                         Ok(()) => {
-                            log::info!("[Hotkey] Settings fallback connection successful");
+                            tracing::info!("[Hotkey] Settings fallback connection successful");
                             connected = true;
                         }
                         Err(e) => {
-                            log::error!("[Hotkey] Settings fallback connection failed: {}", e);
+                            tracing::error!("[Hotkey] Settings fallback connection failed: {}", e);
                             connected = false;
                         }
                     }
@@ -239,7 +277,7 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
             }
 
             if connected {
-                log::info!("[Hotkey] Clean session ready. Opening gate...");
+                tracing::info!("[Hotkey] Clean session ready. Opening gate...");
                 if let Err(e) = state.elevenlabs_streaming().open_gate().await {
                     emit_error(app, &format!("Failed to open gate: {}", e));
                 } else {
@@ -250,7 +288,7 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
             // else fall through to legacy recording
         } else {
             // Already connected and not committing: open gate
-            log::info!("[Hotkey] ElevenLabs gated streaming - opening gate");
+            tracing::info!("[Hotkey] ElevenLabs gated streaming - opening gate");
             if let Err(e) = state.elevenlabs_streaming().open_gate().await {
                 emit_error(app, &format!("Failed to open gate: {}", e));
             } else {
@@ -265,8 +303,12 @@ async fn handle_hotkey_pressed_async(app: &AppHandle, force_translate: bool) -> 
     // For Mock provider in test mode, skip real recording
     // Tests use inject_test_audio() to provide audio data directly
     if settings.provider == TranscriptionProvider::Mock {
-        log::info!("[Hotkey] Mock provider - skipping real microphone recording");
-        emit_status(app, StatusPhase::Recording, Some("Mock recording (test mode)..."));
+        tracing::info!("[Hotkey] Mock provider - skipping real microphone recording");
+        emit_status(
+            app,
+            StatusPhase::Recording,
+            Some("Mock recording (test mode)..."),
+        );
         return Ok(());
     }
 
@@ -351,12 +393,12 @@ async fn handle_hotkey_released_async(app: &AppHandle) -> Result<()> {
             let had_audio = state.elevenlabs_streaming().has_audio_since_open().await;
 
             if !had_audio {
-                log::info!("[Hotkey] No audio since gate opened; closing gate without commit");
+                tracing::info!("[Hotkey] No audio since gate opened; closing gate without commit");
                 let _ = state.elevenlabs_streaming().close_gate().await;
                 emit_status(app, StatusPhase::Idle, Some("Ready for next transcription"));
             } else {
                 // Gated streaming mode - close gate and send commit
-                log::info!("[Hotkey] ElevenLabs gated streaming - closing gate and committing");
+                tracing::info!("[Hotkey] ElevenLabs gated streaming - closing gate and committing");
 
                 // Emit processing status BEFORE waiting for commit
                 emit_status(app, StatusPhase::Transcribing, Some("Processing..."));

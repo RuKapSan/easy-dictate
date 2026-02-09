@@ -1,11 +1,11 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
 use anyhow::{anyhow, Context, Result};
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Sample, SampleFormat, SizedSample, Stream,
+};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
 };
 use tokio::sync::mpsc;
 
@@ -53,7 +53,7 @@ impl ContinuousAudioCapture {
         self.sample_rate = config.sample_rate.0;
         let channels = config.channels as usize;
 
-        log::info!(
+        tracing::info!(
             "[AudioStream] Starting continuous capture: {} Hz, {} channels (-> mono), format: {:?}",
             self.sample_rate,
             channels,
@@ -64,7 +64,7 @@ impl ContinuousAudioCapture {
         let (tx, rx) = mpsc::channel(MAX_AUDIO_BUFFER_SIZE);
         self.audio_tx = Some(tx.clone());
         let chunk_size_ms = 100; // 100ms chunks
-        // Output is mono regardless of input channels, so samples_per_chunk is for 1 channel
+                                 // Output is mono regardless of input channels, so samples_per_chunk is for 1 channel
         let samples_per_chunk = self.sample_rate as usize * chunk_size_ms / 1000;
 
         let stream = build_streaming_input(
@@ -80,7 +80,7 @@ impl ContinuousAudioCapture {
         self.stream = Some(stream);
         self.is_running.store(true, Ordering::Release);
 
-        log::info!("[AudioStream] Continuous capture started");
+        tracing::info!("[AudioStream] Continuous capture started");
         Ok(rx)
     }
 
@@ -90,7 +90,7 @@ impl ContinuousAudioCapture {
             return Ok(());
         }
 
-        log::info!("[AudioStream] Stopping continuous capture");
+        tracing::info!("[AudioStream] Stopping continuous capture");
 
         if let Some(stream) = self.stream.take() {
             drop(stream);
@@ -99,7 +99,7 @@ impl ContinuousAudioCapture {
         self.audio_tx = None;
         self.is_running.store(false, Ordering::Release);
 
-        log::info!("[AudioStream] Continuous capture stopped");
+        tracing::info!("[AudioStream] Continuous capture stopped");
         Ok(())
     }
 
@@ -124,16 +124,42 @@ fn build_streaming_input(
     chunk_size: usize,
 ) -> Result<Stream> {
     let err_fn = |err| {
-        log::error!("[AudioStream] Stream error: {}", err);
+        tracing::error!("[AudioStream] Stream error: {}", err);
     };
 
     match sample_format {
-        SampleFormat::F32 => build_stream::<f32>(device, config, tx, err_fn, channels, chunk_size, convert_f32_to_i16),
-        SampleFormat::F64 => build_stream::<f64>(device, config, tx, err_fn, channels, chunk_size, |s| convert_f32_to_i16(s as f32)),
-        SampleFormat::I16 => build_stream::<i16>(device, config, tx, err_fn, channels, chunk_size, |s| s),
-        SampleFormat::I32 => build_stream::<i32>(device, config, tx, err_fn, channels, chunk_size, |s| (s >> 16) as i16),
-        SampleFormat::I8 => build_stream::<i8>(device, config, tx, err_fn, channels, chunk_size, |s| (s as i16) << 8),
-        SampleFormat::U16 => build_stream::<u16>(device, config, tx, err_fn, channels, chunk_size, |s| (s as i32 - 32768) as i16),
+        SampleFormat::F32 => build_stream::<f32>(
+            device,
+            config,
+            tx,
+            err_fn,
+            channels,
+            chunk_size,
+            convert_f32_to_i16,
+        ),
+        SampleFormat::F64 => {
+            build_stream::<f64>(device, config, tx, err_fn, channels, chunk_size, |s| {
+                convert_f32_to_i16(s as f32)
+            })
+        }
+        SampleFormat::I16 => {
+            build_stream::<i16>(device, config, tx, err_fn, channels, chunk_size, |s| s)
+        }
+        SampleFormat::I32 => {
+            build_stream::<i32>(device, config, tx, err_fn, channels, chunk_size, |s| {
+                (s >> 16) as i16
+            })
+        }
+        SampleFormat::I8 => {
+            build_stream::<i8>(device, config, tx, err_fn, channels, chunk_size, |s| {
+                (s as i16) << 8
+            })
+        }
+        SampleFormat::U16 => {
+            build_stream::<u16>(device, config, tx, err_fn, channels, chunk_size, |s| {
+                (s as i32 - 32768) as i16
+            })
+        }
         other => Err(anyhow!("Unsupported sample format: {:?}", other)),
     }
 }
@@ -165,7 +191,8 @@ fn build_stream<T: Sample + SizedSample + Send + 'static>(
             }
 
             // If we have enough data, send a chunk
-            while buffer.len() >= chunk_size * 2 { // *2 because i16 = 2 bytes
+            while buffer.len() >= chunk_size * 2 {
+                // *2 because i16 = 2 bytes
                 let chunk: Vec<u8> = buffer.drain(..chunk_size * 2).collect();
 
                 // Try to send chunk - if buffer is full, drop oldest audio to prevent blocking
@@ -175,10 +202,10 @@ fn build_stream<T: Sample + SizedSample + Send + 'static>(
                     Err(mpsc::error::TrySendError::Full(_)) => {
                         // Buffer full - this means receiver can't keep up
                         // Drop this chunk to prevent memory buildup and audio glitches
-                        log::warn!("[AudioStream] Buffer full, dropping audio chunk");
+                        tracing::warn!("[AudioStream] Buffer full, dropping audio chunk");
                     }
                     Err(mpsc::error::TrySendError::Closed(_)) => {
-                        log::warn!("[AudioStream] Receiver dropped, stopping stream");
+                        tracing::warn!("[AudioStream] Receiver dropped, stopping stream");
                         return;
                     }
                 }

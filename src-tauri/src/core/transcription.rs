@@ -15,7 +15,7 @@ use crate::{
 
 use super::{
     events::{emit_complete, emit_error, emit_partial, emit_status, StatusPhase},
-    state::AppState,
+    state::{AppState, NewHistoryEntry},
 };
 
 /// Result of transcription containing both original and processed text
@@ -58,10 +58,62 @@ impl TranscriptionService {
         Arc::clone(&self.keyboard)
     }
 
-    pub async fn perform(&self, settings: &AppSettings, audio_wav: Vec<u8>) -> Result<TranscriptionResult> {
+    /// Apply LLM refinement (translation, custom instructions, vocabulary) to text.
+    /// Reuses existing HTTP clients to avoid creating new ones per call.
+    pub async fn refine(&self, settings: &AppSettings, text: String) -> Result<String> {
+        let refinements_key = match settings.llm_provider {
+            LLMProvider::OpenAI => settings.api_key.trim().to_string(),
+            LLMProvider::Groq => settings.groq_api_key.trim().to_string(),
+        };
+
+        if refinements_key.is_empty() {
+            let provider_name = settings.llm_provider.display_name();
+            return Err(anyhow!(
+                "{} API key is required for translation, custom instructions, or vocabulary correction",
+                provider_name
+            ));
+        }
+
+        let custom_instructions = if settings.use_custom_instructions {
+            let trimmed = settings.custom_instructions.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        } else {
+            None
+        };
+
+        let vocabulary = if settings.use_vocabulary {
+            settings.custom_vocabulary.clone()
+        } else {
+            Vec::new()
+        };
+
+        let refinement = RefinementRequest {
+            api_key: refinements_key,
+            model: settings.llm_model.clone(),
+            auto_translate: settings.auto_translate,
+            target_language: settings.target_language.clone(),
+            custom_instructions,
+            vocabulary,
+        };
+
+        match settings.llm_provider {
+            LLMProvider::OpenAI => self.openai.refine_transcript(text, &refinement).await,
+            LLMProvider::Groq => self.groq_llm.refine_transcript(text, &refinement).await,
+        }
+    }
+
+    pub async fn perform(
+        &self,
+        settings: &AppSettings,
+        audio_wav: Vec<u8>,
+    ) -> Result<TranscriptionResult> {
         // Handle Mock provider for E2E testing
         if settings.provider.is_mock() {
-            log::info!("[Transcription] Using Mock provider for testing");
+            tracing::info!("[Transcription] Using Mock provider for testing");
             // Simulate processing delay
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             let mock_text = "Mock transcription result for E2E testing".to_string();
@@ -119,49 +171,7 @@ impl TranscriptionService {
         let mut llm_applied = false;
 
         if !original_text.trim().is_empty() && settings.requires_llm() {
-            let refinements_key = match settings.llm_provider {
-                LLMProvider::OpenAI => settings.api_key.trim().to_string(),
-                LLMProvider::Groq => settings.groq_api_key.trim().to_string(),
-            };
-
-            if refinements_key.is_empty() {
-                let provider_name = settings.llm_provider.display_name();
-                return Err(anyhow!(
-                    "{} API key is required for translation, custom instructions, or vocabulary correction",
-                    provider_name
-                ));
-            }
-
-            let custom_instructions = if settings.use_custom_instructions {
-                let trimmed = settings.custom_instructions.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed.to_string())
-                }
-            } else {
-                None
-            };
-
-            let vocabulary = if settings.use_vocabulary {
-                settings.custom_vocabulary.clone()
-            } else {
-                Vec::new()
-            };
-
-            let refinement = RefinementRequest {
-                api_key: refinements_key,
-                model: settings.model.clone(),
-                auto_translate: settings.auto_translate,
-                target_language: settings.target_language.clone(),
-                custom_instructions,
-                vocabulary,
-            };
-
-            processed_text = match settings.llm_provider {
-                LLMProvider::OpenAI => self.openai.refine_transcript(original_text.clone(), &refinement).await?,
-                LLMProvider::Groq => self.groq_llm.refine_transcript(original_text.clone(), &refinement).await?,
-            };
+            processed_text = self.refine(settings, original_text.clone()).await?;
             llm_applied = true;
         }
 
@@ -177,14 +187,16 @@ pub fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let state: State<'_, AppState> = app_handle.state();
-        let mut settings = state.current_settings().await;
+        let mut settings = (*state.current_settings().await).clone();
 
-        // Check if force_translate is set for this session
-        if state.get_force_translate() {
+        // Check if force_translate was requested for the current session
+        let session_id = state.current_session_id();
+        if state.take_force_translate(session_id) {
             settings.auto_translate = true;
-            log::info!("[Transcription] Force translate enabled for this session");
-            // Clear the flag after using it
-            state.clear_force_translate();
+            tracing::info!(
+                "[Transcription] Force translate enabled for session {}",
+                session_id
+            );
         }
 
         let service = state.transcription();
@@ -212,7 +224,7 @@ pub fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
                     let text_clone = trimmed.clone();
                     tauri::async_runtime::spawn_blocking(move || {
                         if let Err(err) = keyboard_clone.type_text(&text_clone) {
-                            eprintln!("[easy-dictate] typing simulation failed: {err}");
+                            tracing::error!("[Typing] Failed to simulate typing: {}", err);
                         }
                     });
                 }
@@ -220,7 +232,8 @@ pub fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
                 // Save to history (only non-empty results)
                 if !trimmed.is_empty() {
                     // Determine providers used
-                    let transcription_provider = Some(format!("{:?}", settings.provider).to_lowercase());
+                    let transcription_provider =
+                        Some(format!("{:?}", settings.provider).to_lowercase());
                     let llm_provider_used = if result.llm_applied {
                         Some(format!("{:?}", settings.llm_provider).to_lowercase())
                     } else {
@@ -232,21 +245,28 @@ pub fn spawn_transcription(app: &AppHandle, audio_wav: Vec<u8>) {
                         && !settings.custom_instructions.trim().is_empty();
 
                     // If LLM was applied, save original and processed separately
-                    let (original_text, translated_text) = if result.llm_applied && original_trimmed != trimmed {
-                        (original_trimmed, Some(trimmed.clone()))
-                    } else {
-                        (trimmed.clone(), None)
-                    };
+                    let (original_text, translated_text) =
+                        if result.llm_applied && original_trimmed != trimmed {
+                            (original_trimmed, Some(trimmed.clone()))
+                        } else {
+                            (trimmed.clone(), None)
+                        };
 
-                    let _ = state.add_history_entry(
-                        original_text,
-                        translated_text,
-                        None, // source_language - TODO: detect from transcription
-                        if settings.auto_translate { Some(settings.target_language.clone()) } else { None },
-                        transcription_provider,
-                        llm_provider_used,
-                        custom_instructions_used,
-                    ).await;
+                    state
+                        .add_history_entry(NewHistoryEntry {
+                            original: original_text,
+                            translated: translated_text,
+                            source_language: None, // TODO: detect from transcription
+                            target_language: if settings.auto_translate {
+                                Some(settings.target_language.clone())
+                            } else {
+                                None
+                            },
+                            transcription_provider,
+                            llm_provider: llm_provider_used,
+                            custom_instructions_used,
+                        })
+                        .await;
                 }
 
                 emit_status(&app_handle, StatusPhase::Success, None);

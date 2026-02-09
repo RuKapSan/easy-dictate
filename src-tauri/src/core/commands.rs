@@ -1,17 +1,20 @@
-﻿use tauri::{AppHandle, State};
+use tauri::{AppHandle, State};
 
 use crate::settings::AppSettings;
 
 use super::{
+    error::CommandError,
     events::{emit_error, emit_settings_changed, emit_status, StatusPhase},
     hotkey,
     state::{AppState, AudioStreamingHandle},
 };
 use cpal::traits::{DeviceTrait, HostTrait};
 
+type CmdResult<T = ()> = Result<T, CommandError>;
+
 #[tauri::command]
-pub async fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
-    Ok(state.current_settings().await.normalized())
+pub async fn get_settings(state: State<'_, AppState>) -> CmdResult<AppSettings> {
+    Ok((*state.current_settings().await).clone().normalized())
 }
 
 #[tauri::command]
@@ -19,21 +22,18 @@ pub async fn save_settings(
     app: AppHandle,
     state: State<'_, AppState>,
     settings: AppSettings,
-) -> Result<(), String> {
+) -> CmdResult {
     let normalized = settings.normalized();
-    normalized.validate().map_err(|err| err.to_string())?;
+    normalized.validate()?;
 
-    state
-        .persist_settings(&normalized)
-        .await
-        .map_err(|err| err.to_string())?;
+    state.persist_settings(&normalized).await?;
     state.replace_settings(normalized.clone()).await;
 
     if let Err(err) = apply_autostart(&app, normalized.auto_start) {
         emit_error(&app, &format!("Autostart update failed: {err}"));
     }
 
-    hotkey::rebind_hotkey(&app, &normalized).map_err(|err| err.to_string())?;
+    hotkey::rebind_hotkey(&app, &normalized)?;
 
     emit_status(
         &app,
@@ -45,26 +45,31 @@ pub async fn save_settings(
 }
 
 #[tauri::command]
-pub async fn ping() -> Result<&'static str, String> {
+pub async fn ping() -> CmdResult<&'static str> {
     Ok("pong")
 }
 
 #[tauri::command]
-pub async fn toggle_auto_translate(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
-    let mut settings = state.current_settings().await;
-    settings.auto_translate = !settings.auto_translate;
+pub async fn get_app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
 
-    // Persist the toggle
-    state
-        .persist_settings(&settings)
-        .await
-        .map_err(|err| err.to_string())?;
-    state.replace_settings(settings.clone()).await;
+#[tauri::command]
+pub async fn toggle_auto_translate(app: AppHandle, state: State<'_, AppState>) -> CmdResult<bool> {
+    // Atomic read-modify-write under exclusive lock to prevent TOCTOU race
+    let settings = state
+        .update_settings(|s| {
+            s.auto_translate = !s.auto_translate;
+        })
+        .await;
 
-    log::info!("[Toggle] Auto-translate now: {} (target: {})", settings.auto_translate, settings.target_language);
+    state.persist_settings(&settings).await?;
+
+    tracing::info!(
+        "[Toggle] Auto-translate now: {} (target: {})",
+        settings.auto_translate,
+        settings.target_language
+    );
 
     // Emit settings changed event for UI sync
     emit_settings_changed(&app, settings.auto_translate, &settings.target_language);
@@ -81,23 +86,23 @@ pub async fn toggle_auto_translate(
 }
 
 #[tauri::command]
-pub async fn frontend_log(level: Option<String>, message: String) -> Result<(), String> {
+pub async fn frontend_log(level: Option<String>, message: String) -> CmdResult {
     let lvl = level.as_deref().unwrap_or("info");
     match lvl {
-        "error" => log::error!("[frontend] {}", message),
-        "warn" => log::warn!("[frontend] {}", message),
-        "debug" => log::debug!("[frontend] {}", message),
-        "trace" => log::trace!("[frontend] {}", message),
-        _ => log::info!("[frontend] {}", message),
+        "error" => tracing::error!("[frontend] {}", message),
+        "warn" => tracing::warn!("[frontend] {}", message),
+        "debug" => tracing::debug!("[frontend] {}", message),
+        "trace" => tracing::trace!("[frontend] {}", message),
+        _ => tracing::info!("[frontend] {}", message),
     }
     Ok(())
 }
 
-pub(crate) fn apply_autostart(app: &AppHandle, should_enable: bool) -> Result<(), String> {
+pub(crate) fn apply_autostart(app: &AppHandle, should_enable: bool) -> CmdResult {
     #[cfg(debug_assertions)]
     {
         let _ = (app, should_enable);
-        log::debug!("Skipping autostart toggle in debug builds");
+        tracing::debug!("Skipping autostart toggle in debug builds");
         Ok(())
     }
 
@@ -111,9 +116,9 @@ pub(crate) fn apply_autostart(app: &AppHandle, should_enable: bool) -> Result<()
             // Note: TAURI_AUTOSTART_ARGS is read at compile time by tauri-plugin-autostart,
             // so setting it at runtime has no effect. The --autostart flag is configured
             // in tauri.conf.json or via the plugin's builder instead.
-            manager.enable().map_err(|err| err.to_string())?;
+            manager.enable().map_err(|e| anyhow::anyhow!(e))?;
         } else {
-            manager.disable().map_err(|err| err.to_string())?;
+            manager.disable().map_err(|e| anyhow::anyhow!(e))?;
         }
         Ok(())
     }
@@ -130,7 +135,7 @@ pub async fn elevenlabs_streaming_connect(
     api_key: String,
     sample_rate: u32,
     language_code: String,
-) -> Result<(), String> {
+) -> CmdResult {
     // Determine actual input device sample rate to avoid mismatches with server format
     let actual_sample_rate = {
         let host = cpal::default_host();
@@ -145,7 +150,7 @@ pub async fn elevenlabs_streaming_connect(
     };
 
     if actual_sample_rate != sample_rate {
-        log::info!(
+        tracing::info!(
             "[Commands] Overriding requested sample rate {} Hz with device rate {} Hz",
             sample_rate,
             actual_sample_rate
@@ -156,24 +161,28 @@ pub async fn elevenlabs_streaming_connect(
     state
         .elevenlabs_streaming()
         .connect(api_key, actual_sample_rate, language_code, app.clone())
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     // 2. Stop and wait for any existing audio streaming task to prevent concurrent access
-    {
-        let mut handle_guard = state.audio_streaming_handle().lock()
-            .map_err(|_| "Failed to lock audio streaming handle".to_string())?;
+    let prev_handle = {
+        let mut guard = state
+            .audio_streaming_handle()
+            .lock()
+            .map_err(|_| CommandError::Lock("audio streaming handle".into()))?;
+        guard.take()
+    };
 
-        if let Some(handle) = handle_guard.take() {
-            log::info!("[Commands] Stopping existing audio streaming task and waiting for it to finish");
-            handle.cancel_token.cancel();
-            // Wait for the thread to finish (with timeout to prevent hanging)
-            // The thread should exit quickly after cancel_token is cancelled
-            match handle.join_handle.join() {
-                Ok(()) => log::info!("[Commands] Previous audio streaming task finished cleanly"),
-                Err(_) => log::warn!("[Commands] Previous audio streaming task panicked"),
-            }
-        }
+    if let Some(handle) = prev_handle {
+        tracing::info!(
+            "[Commands] Stopping existing audio streaming task and waiting for it to finish"
+        );
+        handle.cancel_token.cancel();
+        tokio::task::spawn_blocking(move || match handle.join_handle.join() {
+            Ok(()) => tracing::info!("[Commands] Previous audio streaming task finished cleanly"),
+            Err(_) => tracing::warn!("[Commands] Previous audio streaming task panicked"),
+        })
+        .await
+        .map_err(|e| CommandError::Io(format!("Failed to join audio streaming task: {}", e)))?;
     }
 
     // 3. Spawn dedicated thread for audio streaming (CPAL Stream is !Send)
@@ -188,7 +197,7 @@ pub async fn elevenlabs_streaming_connect(
         let mut audio_capture = match ContinuousAudioCapture::new() {
             Ok(capture) => capture,
             Err(e) => {
-                log::error!("[AudioStreaming] Failed to create audio capture: {}", e);
+                tracing::error!("[AudioStreaming] Failed to create audio capture: {}", e);
                 return;
             }
         };
@@ -197,38 +206,32 @@ pub async fn elevenlabs_streaming_connect(
         let audio_rx = match audio_capture.start() {
             Ok(rx) => rx,
             Err(e) => {
-                log::error!("[AudioStreaming] Failed to start audio capture: {}", e);
+                tracing::error!("[AudioStreaming] Failed to start audio capture: {}", e);
                 return;
             }
         };
 
         let sample_rate = audio_capture.sample_rate();
-        log::info!("[AudioStreaming] Audio capture started: {} Hz", sample_rate);
+        tracing::info!("[AudioStreaming] Audio capture started: {} Hz", sample_rate);
 
-        // Create tokio runtime for async operations on this thread
-        let rt = match tokio::runtime::Runtime::new() {
-            Ok(rt) => rt,
-            Err(e) => {
-                log::error!("[AudioStreaming] Failed to create runtime: {}", e);
-                return;
-            }
-        };
-
-        // Run streaming task
-        rt.block_on(async move {
+        // Reuse the existing Tauri async runtime instead of creating a new one
+        let rt_handle = tauri::async_runtime::handle();
+        rt_handle.block_on(async move {
             audio_streaming_task(audio_rx, audio_capture, streaming_client, cancel_clone).await;
         });
     });
 
     // Store handle for proper cleanup later
-    let mut handle_guard = state.audio_streaming_handle().lock()
-        .map_err(|_| "Failed to lock audio streaming handle".to_string())?;
+    let mut handle_guard = state
+        .audio_streaming_handle()
+        .lock()
+        .map_err(|_| CommandError::Lock("audio streaming handle".into()))?;
     *handle_guard = Some(AudioStreamingHandle {
         cancel_token,
         join_handle,
     });
 
-    log::info!("[Commands] ElevenLabs streaming connected and audio pipeline started");
+    tracing::info!("[Commands] ElevenLabs streaming connected and audio pipeline started");
 
     Ok(())
 }
@@ -240,28 +243,22 @@ async fn audio_streaming_task(
     streaming_client: crate::elevenlabs_streaming::ElevenLabsStreamingClient,
     cancel_token: tokio_util::sync::CancellationToken,
 ) {
-    log::info!("[AudioStreaming] Task started");
-
-    // Noise gate threshold (RMS amplitude)
-    // PCM16 max is 32767.
-    // 100 ~= -50dB (very quiet threshold to not filter out speech)
-    // 500 ~= -36dB (too aggressive, filters out normal speech)
-    const NOISE_THRESHOLD: f32 = 100.0;
+    tracing::info!("[AudioStreaming] Task started");
 
     loop {
         tokio::select! {
             _ = cancel_token.cancelled() => {
-                log::info!("[AudioStreaming] Task cancelled, stopping audio capture");
+                tracing::info!("[AudioStreaming] Task cancelled, stopping audio capture");
                 let _ = audio_capture.stop();
                 break;
             }
             chunk = audio_rx.recv() => {
                 match chunk {
-                    Some(mut pcm_data) => {
+                    Some(pcm_data) => {
                         // Calculate RMS to check for silence/noise
                         let mut sum_squares = 0.0;
                         let mut sample_count = 0;
-                        
+
                         for chunk in pcm_data.chunks_exact(2) {
                             let sample = i16::from_le_bytes([chunk[0], chunk[1]]) as f32;
                             sum_squares += sample * sample;
@@ -278,7 +275,7 @@ async fn audio_streaming_task(
                         static CHUNK_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
                         let count = CHUNK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         if count % 10 == 0 {
-                            log::debug!("[AudioStreaming] RMS level: {:.0}", rms);
+                            tracing::debug!("[AudioStreaming] RMS level: {:.0}", rms);
                         }
 
                         // Noise gate temporarily disabled for debugging
@@ -287,21 +284,21 @@ async fn audio_streaming_task(
                         //     // Silence the chunk
                         //     pcm_data.fill(0);
                         // }
-                        log::info!("[AudioStreaming] RMS level: {:.0}", rms);
+                        tracing::debug!("[AudioStreaming] RMS level: {:.0}", rms);
 
                         // Send chunk to streaming client (will check gate internally)
                         if let Err(e) = streaming_client.send_audio_chunk(pcm_data).await {
-                            log::error!("[AudioStreaming] Failed to send chunk: {}", e);
+                            tracing::error!("[AudioStreaming] Failed to send chunk: {}", e);
                             // If connection is dead or other fatal error, stop the loop
                             let err_str = e.to_string();
                             if err_str.contains("Connection is dead") || err_str.contains("closed") || err_str.contains("Not connected") {
-                                log::info!("[AudioStreaming] Connection closed, stopping audio task");
+                                tracing::info!("[AudioStreaming] Connection closed, stopping audio task");
                                 break;
                             }
                         }
                     }
                     None => {
-                        log::info!("[AudioStreaming] Audio stream ended");
+                        tracing::info!("[AudioStreaming] Audio stream ended");
                         break;
                     }
                 }
@@ -309,81 +306,67 @@ async fn audio_streaming_task(
         }
     }
 
-    log::info!("[AudioStreaming] Task finished");
+    tracing::info!("[AudioStreaming] Task finished");
 }
 
 #[tauri::command]
-pub async fn elevenlabs_streaming_disconnect(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    log::info!("[Commands] Disconnecting ElevenLabs streaming...");
+pub async fn elevenlabs_streaming_disconnect(state: State<'_, AppState>) -> CmdResult {
+    tracing::info!("[Commands] Disconnecting ElevenLabs streaming...");
 
     // 1. Stop audio streaming task and wait for it to finish
-    {
-        let mut handle_guard = state.audio_streaming_handle().lock()
-            .map_err(|_| "Failed to lock audio streaming handle".to_string())?;
+    let prev_handle = {
+        let mut guard = state
+            .audio_streaming_handle()
+            .lock()
+            .map_err(|_| CommandError::Lock("audio streaming handle".into()))?;
+        guard.take()
+    };
 
-        if let Some(handle) = handle_guard.take() {
-            log::info!("[Commands] Stopping audio streaming task...");
-            handle.cancel_token.cancel();
-            // Wait for the thread to finish
-            match handle.join_handle.join() {
-                Ok(()) => log::info!("[Commands] Audio streaming task stopped cleanly"),
-                Err(_) => log::warn!("[Commands] Audio streaming task panicked"),
-            }
-        }
+    if let Some(handle) = prev_handle {
+        tracing::info!("[Commands] Stopping audio streaming task...");
+        handle.cancel_token.cancel();
+        tokio::task::spawn_blocking(move || match handle.join_handle.join() {
+            Ok(()) => tracing::info!("[Commands] Audio streaming task stopped cleanly"),
+            Err(_) => tracing::warn!("[Commands] Audio streaming task panicked"),
+        })
+        .await
+        .map_err(|e| CommandError::Io(format!("Failed to join audio streaming task: {}", e)))?;
     }
 
     // 2. Disconnect WebSocket
-    state
-        .elevenlabs_streaming()
-        .disconnect()
-        .await
-        .map_err(|e| e.to_string())?;
+    state.elevenlabs_streaming().disconnect().await?;
 
-    log::info!("[Commands] ElevenLabs streaming disconnected");
+    tracing::info!("[Commands] ElevenLabs streaming disconnected");
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn elevenlabs_streaming_open_gate(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    state
-        .elevenlabs_streaming()
-        .open_gate()
-        .await
-        .map_err(|e| e.to_string())
+pub async fn elevenlabs_streaming_open_gate(state: State<'_, AppState>) -> CmdResult {
+    state.elevenlabs_streaming().open_gate().await?;
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn elevenlabs_streaming_close_gate(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    state
-        .elevenlabs_streaming()
-        .close_gate_and_commit()
-        .await
-        .map_err(|e| e.to_string())
+pub async fn elevenlabs_streaming_close_gate(state: State<'_, AppState>) -> CmdResult {
+    state.elevenlabs_streaming().close_gate_and_commit().await?;
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn elevenlabs_streaming_send_chunk(
     state: State<'_, AppState>,
     pcm_data: Vec<u8>,
-) -> Result<(), String> {
+) -> CmdResult {
     state
         .elevenlabs_streaming()
         .send_audio_chunk(pcm_data)
-        .await
-        .map_err(|e| e.to_string())
+        .await?;
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn elevenlabs_streaming_is_connected(
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+pub async fn elevenlabs_streaming_is_connected(state: State<'_, AppState>) -> CmdResult<bool> {
     Ok(state.elevenlabs_streaming().is_connected().await)
 }
 
@@ -394,21 +377,18 @@ pub async fn elevenlabs_streaming_is_connected(
 use super::state::HistoryEntry;
 
 #[tauri::command]
-pub async fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
+pub async fn get_history(state: State<'_, AppState>) -> CmdResult<Vec<HistoryEntry>> {
     Ok(state.get_history().await)
 }
 
 #[tauri::command]
-pub async fn clear_history(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn clear_history(state: State<'_, AppState>) -> CmdResult {
     state.clear_history().await;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn delete_history_entry(
-    state: State<'_, AppState>,
-    id: u64,
-) -> Result<bool, String> {
+pub async fn delete_history_entry(state: State<'_, AppState>, id: u64) -> CmdResult<bool> {
     Ok(state.delete_history_entry(id).await)
 }
 
@@ -421,44 +401,63 @@ pub async fn delete_history_entry(
 /// Accepts raw WAV bytes to avoid Tauri FS scope restrictions
 #[tauri::command]
 pub async fn inject_test_audio(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    audio_data: Vec<u8>,
-) -> Result<String, String> {
-    log::info!("[TestMode] Injecting test audio: {} bytes", audio_data.len());
-
-    if audio_data.is_empty() {
-        return Err("Audio data is empty".to_string());
+    #[allow(unused)] app: AppHandle,
+    #[allow(unused)] state: State<'_, AppState>,
+    #[allow(unused)] audio_data: Vec<u8>,
+) -> CmdResult<String> {
+    #[cfg(not(debug_assertions))]
+    {
+        return Err(CommandError::Unavailable(
+            "Test commands are not available in release builds".into(),
+        ));
     }
 
-    // Validate WAV header (RIFF....WAVE)
-    if audio_data.len() < 12 || &audio_data[0..4] != b"RIFF" || &audio_data[8..12] != b"WAVE" {
-        return Err("Invalid WAV format: missing RIFF/WAVE header".to_string());
-    }
+    #[cfg(debug_assertions)]
+    {
+        use anyhow::anyhow;
 
-    let audio_wav = audio_data;
+        tracing::info!(
+            "[TestMode] Injecting test audio: {} bytes",
+            audio_data.len()
+        );
 
-    // Get settings and perform transcription directly
-    let settings = state.current_settings().await;
-    let service = state.transcription();
-
-    // Emit status to UI
-    super::events::emit_status(&app, super::events::StatusPhase::Transcribing, Some("Processing test audio..."));
-
-    match service.perform(&settings, audio_wav).await {
-        Ok(result) => {
-            let trimmed = result.processed.trim().to_string();
-            log::info!("[TestMode] Transcription result: {}", trimmed);
-
-            super::events::emit_status(&app, super::events::StatusPhase::Success, None);
-            super::events::emit_complete(&app, &trimmed);
-
-            Ok(trimmed)
+        if audio_data.is_empty() {
+            return Err(anyhow!("Audio data is empty").into());
         }
-        Err(err) => {
-            log::error!("[TestMode] Transcription failed: {}", err);
-            super::events::emit_error(&app, &err.to_string());
-            Err(err.to_string())
+
+        // Validate WAV header (RIFF....WAVE)
+        if audio_data.len() < 12 || &audio_data[0..4] != b"RIFF" || &audio_data[8..12] != b"WAVE" {
+            return Err(anyhow!("Invalid WAV format: missing RIFF/WAVE header").into());
+        }
+
+        let audio_wav = audio_data;
+
+        // Get settings and perform transcription directly
+        let settings = state.current_settings().await;
+        let service = state.transcription();
+
+        // Emit status to UI
+        super::events::emit_status(
+            &app,
+            super::events::StatusPhase::Transcribing,
+            Some("Processing test audio..."),
+        );
+
+        match service.perform(&settings, audio_wav).await {
+            Ok(result) => {
+                let trimmed = result.processed.trim().to_string();
+                tracing::info!("[TestMode] Transcription result: {}", trimmed);
+
+                super::events::emit_status(&app, super::events::StatusPhase::Success, None);
+                super::events::emit_complete(&app, &trimmed);
+
+                Ok(trimmed)
+            }
+            Err(err) => {
+                tracing::error!("[TestMode] Transcription failed: {}", err);
+                super::events::emit_error(&app, &err.to_string());
+                Err(err.into())
+            }
         }
     }
 }
@@ -466,70 +465,114 @@ pub async fn inject_test_audio(
 /// Get current app state for testing
 #[tauri::command]
 pub async fn get_test_state(
-    state: State<'_, AppState>,
-) -> Result<serde_json::Value, String> {
-    use std::sync::atomic::Ordering;
+    #[allow(unused)] state: State<'_, AppState>,
+) -> CmdResult<serde_json::Value> {
+    #[cfg(not(debug_assertions))]
+    {
+        return Err(CommandError::Unavailable(
+            "Test commands are not available in release builds".into(),
+        ));
+    }
 
-    let is_recording = state.active_recording()
-        .lock()
-        .map(|guard| guard.is_some())
-        .unwrap_or(false);
-    let is_transcribing = state.is_transcribing().load(Ordering::SeqCst);
-    let settings = state.current_settings().await;
+    #[cfg(debug_assertions)]
+    {
+        use std::sync::atomic::Ordering;
 
-    Ok(serde_json::json!({
-        "is_recording": is_recording,
-        "is_transcribing": is_transcribing,
-        "provider": format!("{:?}", settings.provider),
-        "has_api_key": !settings.api_key.is_empty(),
-        "hotkey": settings.hotkey
-    }))
+        let is_recording = state
+            .active_recording()
+            .lock()
+            .map(|guard| guard.is_some())
+            .unwrap_or(false);
+        let is_transcribing = state.is_transcribing().load(Ordering::SeqCst);
+        let settings = state.current_settings().await;
+
+        Ok(serde_json::json!({
+            "is_recording": is_recording,
+            "is_transcribing": is_transcribing,
+            "provider": format!("{:?}", settings.provider),
+            "has_api_key": !settings.api_key.is_empty(),
+            "hotkey": settings.hotkey
+        }))
+    }
 }
 
 /// Simulate hotkey press for testing (starts recording)
 #[tauri::command]
-pub async fn simulate_hotkey_press(app: AppHandle) -> Result<(), String> {
-    log::info!("[TestMode] Simulating hotkey press");
-    super::hotkey::handle_hotkey_pressed(&app, false);
-    Ok(())
+pub async fn simulate_hotkey_press(#[allow(unused)] app: AppHandle) -> CmdResult {
+    #[cfg(not(debug_assertions))]
+    {
+        return Err(CommandError::Unavailable(
+            "Test commands are not available in release builds".into(),
+        ));
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        tracing::info!("[TestMode] Simulating hotkey press");
+        super::hotkey::handle_hotkey_pressed(&app, false);
+        Ok(())
+    }
 }
 
 /// Simulate hotkey release for testing (stops recording and triggers transcription)
 #[tauri::command]
-pub async fn simulate_hotkey_release(app: AppHandle) -> Result<(), String> {
-    log::info!("[TestMode] Simulating hotkey release");
-    super::hotkey::handle_hotkey_released(&app);
-    Ok(())
+pub async fn simulate_hotkey_release(#[allow(unused)] app: AppHandle) -> CmdResult {
+    #[cfg(not(debug_assertions))]
+    {
+        return Err(CommandError::Unavailable(
+            "Test commands are not available in release builds".into(),
+        ));
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        tracing::info!("[TestMode] Simulating hotkey release");
+        super::hotkey::handle_hotkey_released(&app);
+        Ok(())
+    }
 }
 
 /// Show main window for E2E testing
 /// Used when tauri-driver launches the app and the window starts hidden
 #[tauri::command]
-pub async fn show_main_window(app: AppHandle) -> Result<(), String> {
-    use tauri::Manager;
+pub async fn show_main_window(#[allow(unused)] app: AppHandle) -> CmdResult {
+    #[cfg(not(debug_assertions))]
+    {
+        return Err(CommandError::Unavailable(
+            "Test commands are not available in release builds".into(),
+        ));
+    }
 
-    log::info!("[TestMode] Showing main window");
-    if let Some(window) = app.get_webview_window("main") {
-        window.show().map_err(|e| e.to_string())?;
-        window.unminimize().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
-        Ok(())
-    } else {
-        Err("Main window not found".to_string())
+    #[cfg(debug_assertions)]
+    {
+        use anyhow::anyhow;
+        use tauri::Manager;
+
+        tracing::info!("[TestMode] Showing main window");
+        if let Some(window) = app.get_webview_window("main") {
+            window.show().map_err(|e| anyhow!(e))?;
+            window.unminimize().map_err(|e| anyhow!(e))?;
+            window.set_focus().map_err(|e| anyhow!(e))?;
+            Ok(())
+        } else {
+            Err(CommandError::NotFound("Main window not found".into()))
+        }
     }
 }
 
 #[tauri::command]
-pub async fn show_overlay_no_focus(app: AppHandle) -> Result<(), String> {
+pub async fn show_overlay_no_focus(app: AppHandle) -> CmdResult {
     use tauri::Manager;
 
     if let Some(window) = app.get_webview_window("overlay") {
         #[cfg(target_os = "windows")]
         {
             use windows::Win32::Foundation::{HWND, POINT, RECT};
-            use windows::Win32::Graphics::Gdi::{MonitorFromPoint, GetMonitorInfoW, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+            use windows::Win32::Graphics::Gdi::{
+                GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+            };
             use windows::Win32::UI::WindowsAndMessaging::{
-                SetWindowPos, GetCursorPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW
+                GetCursorPos, SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW,
             };
 
             const OVERLAY_WIDTH: i32 = 600;
@@ -564,29 +607,39 @@ pub async fn show_overlay_no_focus(app: AppHandle) -> Result<(), String> {
                     }
                 };
 
-                log::info!("[Commands] Positioning overlay at ({}, {}) on monitor with cursor", x, y);
+                tracing::info!(
+                    "[Commands] Positioning overlay at ({}, {}) on monitor with cursor",
+                    x,
+                    y
+                );
 
                 // SAFETY: SetWindowPos with valid HWND. We're setting position and showing window.
                 unsafe {
                     let _ = SetWindowPos(
                         hwnd,
                         Some(HWND_TOPMOST),
-                        x, y,
-                        OVERLAY_WIDTH, OVERLAY_HEIGHT,
-                        SWP_NOACTIVATE | SWP_SHOWWINDOW
+                        x,
+                        y,
+                        OVERLAY_WIDTH,
+                        OVERLAY_HEIGHT,
+                        SWP_NOACTIVATE | SWP_SHOWWINDOW,
                     );
                 }
 
-                window.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
+                window
+                    .set_ignore_cursor_events(true)
+                    .map_err(|e| anyhow::anyhow!(e))?;
             } else {
-                log::warn!("[Commands] Failed to get HWND for overlay, falling back to standard show");
-                window.show().map_err(|e| e.to_string())?;
+                tracing::warn!(
+                    "[Commands] Failed to get HWND for overlay, falling back to standard show"
+                );
+                window.show().map_err(|e| anyhow::anyhow!(e))?;
             }
         }
 
         #[cfg(not(target_os = "windows"))]
         {
-            window.show().map_err(|e| e.to_string())?;
+            window.show().map_err(|e| anyhow::anyhow!(e))?;
         }
     }
     Ok(())

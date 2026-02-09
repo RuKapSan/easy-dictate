@@ -132,6 +132,8 @@ const translations = {
     'toast.error.hotkey.key': 'Нужна основная клавиша',
     'toast.error.hotkey.mouse': 'Мышь не поддерживается',
     'toast.error.hotkey.recognize': 'Не удалось распознать',
+    'toast.error.copy': 'Скопировать отчёт',
+    'toast.error.report': 'Сообщить об ошибке',
   },
 
   en: {
@@ -263,6 +265,8 @@ const translations = {
     'toast.error.hotkey.key': 'Need a main key',
     'toast.error.hotkey.mouse': 'Mouse not supported',
     'toast.error.hotkey.recognize': 'Could not recognize',
+    'toast.error.copy': 'Copy report',
+    'toast.error.report': 'Report bug',
   }
 };
 

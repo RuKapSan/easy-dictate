@@ -3,6 +3,12 @@
  * Manages Tauri backend commands for real-time transcription
  */
 
+/** Extract message from a command error ({ code, message } or string). */
+function elErrMsg(err) {
+  if (err && typeof err === "object" && err.message) return err.message;
+  return String(err);
+}
+
 function log(msg, level = "info") {
   console.log(`[ElevenLabs STT] ${msg}`);
   if (window.__TAURI__?.core?.invoke) {
@@ -63,8 +69,8 @@ async function connectElevenLabsStreaming(apiKey, sampleRate = 48000, languageCo
     log("Connected to streaming successfully");
     return true;
   } catch (error) {
-    log(`Failed to connect: ${error}`, "error");
-    showToastIfAvailable(`ElevenLabs connection error: ${error}`, "error");
+    log(`Failed to connect: ${elErrMsg(error)}`, "error");
+    showToastIfAvailable(`ElevenLabs connection error: ${elErrMsg(error)}`, "error");
     isConnected = false;
     return false;
   }
@@ -84,7 +90,7 @@ async function disconnectElevenLabsStreaming() {
     isConnected = false;
     log("Disconnected");
   } catch (error) {
-    log(`Failed to disconnect: ${error}`, "error");
+    log(`Failed to disconnect: ${elErrMsg(error)}`, "error");
   }
 }
 
@@ -219,10 +225,19 @@ async function setupElevenLabsEventListeners() {
 
     log(`Connection closed. Code: ${code}, Reason: ${reason}`, "info");
     isConnected = false;
-    if (code === 4001 && currentProvider === "elevenlabs" && lastApiKey) {
-      setTimeout(() => {
-        log("Reconnecting after context reset...");
-        connectElevenLabsStreaming(lastApiKey, lastSampleRate, lastLanguageCode);
+    if (code === 4001 && currentProvider === "elevenlabs") {
+      setTimeout(async () => {
+        // Re-read current settings to avoid using stale cached values
+        try {
+          const settings = await window.__TAURI__.core.invoke("get_settings");
+          const apiKey = settings.elevenlabs_api_key || lastApiKey;
+          if (!apiKey) return;
+          log("Reconnecting after context reset with fresh settings...");
+          connectElevenLabsStreaming(apiKey, lastSampleRate, lastLanguageCode);
+        } catch (e) {
+          log(`Failed to get settings for reconnect: ${elErrMsg(e)}`, "error");
+          if (lastApiKey) connectElevenLabsStreaming(lastApiKey, lastSampleRate, lastLanguageCode);
+        }
       }, 100);
     }
   });

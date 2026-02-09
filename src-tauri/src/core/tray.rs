@@ -31,11 +31,12 @@ pub fn install_tray(app: &AppHandle) -> Result<MenuItem<tauri::Wry>> {
         .tooltip("Easy Dictate");
 
     // Create icon from PNG bytes
-    if let Some(icon_image) = Image::from_bytes(icon_bytes).ok() {
+    if let Ok(icon_image) = Image::from_bytes(icon_bytes) {
         tray_builder = tray_builder.icon(icon_image);
     }
 
-    tray_builder.on_tray_icon_event(move |_tray, event| match event {
+    tray_builder
+        .on_tray_icon_event(move |_tray, event| match event {
             TrayIconEvent::Click {
                 button,
                 button_state,

@@ -1,0 +1,9 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-get-app-version",
+      "description": "Allow calling get_app_version",
+      "commands": { "allow": ["get_app_version"], "deny": [] }
+    }
+  ]
+}

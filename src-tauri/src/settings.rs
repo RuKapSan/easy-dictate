@@ -5,9 +5,35 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::fs as async_fs;
 
+// ---------------------------------------------------------------------------
+// OS Keychain helpers (keyring crate)
+// ---------------------------------------------------------------------------
+
+const KEYRING_SERVICE: &str = "easy-dictate";
+
+fn keyring_get(field: &str) -> Option<String> {
+    keyring::Entry::new(KEYRING_SERVICE, field)
+        .ok()
+        .and_then(|e| e.get_password().ok())
+        .filter(|s| !s.is_empty())
+}
+
+fn keyring_set(field: &str, value: &str) -> bool {
+    let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, field) else {
+        return false;
+    };
+    if value.is_empty() {
+        // Remove stale entry; ignore "not found" errors
+        let _ = entry.delete_credential();
+        return true;
+    }
+    entry.set_password(value).is_ok()
+}
+
 const DEFAULT_HOTKEY: &str = "Ctrl+Shift+Space";
 const CONFIG_FILE: &str = "settings.json";
 const DEFAULT_MODEL: &str = "gpt-4o-transcribe";
+const DEFAULT_LLM_MODEL: &str = "gpt-4o-mini";
 const DEFAULT_TARGET_LANGUAGE: &str = "English";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -63,6 +89,7 @@ pub struct AppSettings {
     pub groq_api_key: String,
     pub elevenlabs_api_key: String,
     pub model: String,
+    pub llm_model: String,
     pub hotkey: String,
     pub translate_hotkey: String,
     pub toggle_translate_hotkey: String,
@@ -78,6 +105,7 @@ pub struct AppSettings {
     pub custom_instructions: String,
     pub use_vocabulary: bool,
     pub custom_vocabulary: Vec<String>,
+    pub ui_language: String,
 }
 
 impl Default for AppSettings {
@@ -89,6 +117,7 @@ impl Default for AppSettings {
             groq_api_key: String::new(),
             elevenlabs_api_key: String::new(),
             model: DEFAULT_MODEL.to_string(),
+            llm_model: DEFAULT_LLM_MODEL.to_string(),
             hotkey: DEFAULT_HOTKEY.to_string(),
             translate_hotkey: String::new(),
             toggle_translate_hotkey: String::new(),
@@ -104,6 +133,7 @@ impl Default for AppSettings {
             custom_instructions: String::new(),
             use_vocabulary: false,
             custom_vocabulary: Vec::new(),
+            ui_language: "ru".to_string(),
         }
     }
 }
@@ -137,6 +167,11 @@ impl AppSettings {
         } else {
             self.model.trim().to_string()
         };
+        self.llm_model = if self.llm_model.trim().is_empty() {
+            DEFAULT_LLM_MODEL.to_string()
+        } else {
+            self.llm_model.trim().to_string()
+        };
         self.hotkey = self.normalized_hotkey();
         self.translate_hotkey = self.translate_hotkey.trim().to_string();
         self.toggle_translate_hotkey = self.toggle_translate_hotkey.trim().to_string();
@@ -149,6 +184,12 @@ impl AppSettings {
         if !self.use_custom_instructions || self.custom_instructions.is_empty() {
             self.use_custom_instructions = false;
         }
+        let lang = self.ui_language.trim().to_lowercase();
+        self.ui_language = if lang == "en" {
+            "en".to_string()
+        } else {
+            "ru".to_string()
+        };
         self
     }
 
@@ -298,16 +339,35 @@ impl SettingsStore {
 
     pub async fn load(&self) -> Result<AppSettings> {
         let path = self.file_path();
-        if !path.exists() {
-            return Ok(AppSettings::default());
+        let mut settings = if !path.exists() {
+            AppSettings::default()
+        } else {
+            let raw = async_fs::read(&path)
+                .await
+                .with_context(|| format!("Failed to read {path:?}"))?;
+            serde_json::from_slice::<AppSettings>(&raw)
+                .with_context(|| format!("Failed to parse {path:?}"))?
+        };
+
+        // Override API keys from OS keychain (takes priority over JSON)
+        let kr_api = keyring_get("api_key");
+        let kr_groq = keyring_get("groq_api_key");
+        let kr_el = keyring_get("elevenlabs_api_key");
+
+        if kr_api.is_some() || kr_groq.is_some() || kr_el.is_some() {
+            if let Some(k) = kr_api {
+                settings.api_key = k;
+            }
+            if let Some(k) = kr_groq {
+                settings.groq_api_key = k;
+            }
+            if let Some(k) = kr_el {
+                settings.elevenlabs_api_key = k;
+            }
+            tracing::debug!("[Settings] API keys loaded from OS keychain");
         }
 
-        let raw = async_fs::read(&path)
-            .await
-            .with_context(|| format!("Failed to read {path:?}"))?;
-        let parsed: AppSettings =
-            serde_json::from_slice(&raw).with_context(|| format!("Failed to parse {path:?}"))?;
-        Ok(parsed.normalized())
+        Ok(settings.normalized())
     }
 
     pub async fn save(&self, settings: &AppSettings) -> Result<()> {
@@ -322,13 +382,37 @@ impl SettingsStore {
                 })?;
         }
 
-        let normalized = settings.clone().normalized();
-        let serialized = serde_json::to_vec_pretty(&normalized)
+        let mut disk_settings = settings.clone().normalized();
+
+        // Persist API keys in OS keychain; strip them from the JSON file.
+        // If keyring is unavailable (headless Linux, etc.) keys stay in JSON as fallback.
+        let keyring_ok = keyring_set("api_key", &disk_settings.api_key)
+            && keyring_set("groq_api_key", &disk_settings.groq_api_key)
+            && keyring_set("elevenlabs_api_key", &disk_settings.elevenlabs_api_key);
+
+        if keyring_ok {
+            disk_settings.api_key.clear();
+            disk_settings.groq_api_key.clear();
+            disk_settings.elevenlabs_api_key.clear();
+            tracing::debug!("[Settings] API keys saved to OS keychain");
+        } else {
+            tracing::warn!(
+                "[Settings] OS keychain unavailable, API keys stored in settings file as fallback"
+            );
+        }
+
+        let serialized = serde_json::to_vec_pretty(&disk_settings)
             .context("Failed to serialize settings to JSON")?;
 
-        async_fs::write(self.file_path(), serialized)
+        // Atomic write: write to temp file first, then rename to avoid corruption on crash
+        let target = self.file_path();
+        let tmp = target.with_extension("json.tmp");
+        async_fs::write(&tmp, serialized)
             .await
-            .context("Failed to write settings file")
+            .context("Failed to write temporary settings file")?;
+        async_fs::rename(&tmp, &target)
+            .await
+            .context("Failed to rename temporary settings file")
     }
 }
 
@@ -403,7 +487,10 @@ mod tests {
 
         let result = settings.validate_for_transcription();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), SettingsValidationError::MissingApiKey("OpenAI")));
+        assert!(matches!(
+            result.unwrap_err(),
+            SettingsValidationError::MissingApiKey("OpenAI")
+        ));
     }
 
     #[test]

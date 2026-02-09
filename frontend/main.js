@@ -3,6 +3,18 @@ let listen = null;
 let emit = null;
 let tauriApp = null;
 
+/** Extract human-readable message from a command error (string or { code, message }). */
+function errMsg(err) {
+  if (err && typeof err === "object" && err.message) return err.message;
+  return String(err);
+}
+
+/** Extract error code from a command error, or "unknown". */
+function errCode(err) {
+  if (err && typeof err === "object" && err.code) return err.code;
+  return "unknown";
+}
+
 function dbg(msg, level = "info") {
   try {
     const m = `[UI] ${msg}`;
@@ -96,6 +108,7 @@ const importVocabularyBtn = document.getElementById("importVocabulary");
 const exportVocabularyBtn = document.getElementById("exportVocabulary");
 
 // Actions
+const saveBtn = document.getElementById("saveBtn");
 const revertBtn = document.getElementById("revertBtn");
 
 // History
@@ -169,10 +182,99 @@ function initTabs() {
 
 function showToast(message, type = "info") {
   if (!toastEl) return;
+  delete toastEl.dataset.persistent;
   toastEl.textContent = message;
   toastEl.dataset.type = type;
   toastEl.hidden = false;
-  setTimeout(() => { toastEl.hidden = true; }, 2800);
+  setTimeout(() => {
+    if (!toastEl.dataset.persistent) toastEl.hidden = true;
+  }, 2800);
+}
+
+async function getAppVersion() {
+  try {
+    return await invoke('get_app_version');
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function collectDebugInfo(errorMessage) {
+  const settings = currentSettings();
+  const safeSettings = {
+    ...settings,
+    api_key: settings.api_key ? '[SET]' : '[EMPTY]',
+    groq_api_key: settings.groq_api_key ? '[SET]' : '[EMPTY]',
+    elevenlabs_api_key: settings.elevenlabs_api_key ? '[SET]' : '[EMPTY]',
+    custom_instructions: settings.custom_instructions ? '[SET]' : '[EMPTY]',
+    custom_vocabulary: settings.custom_vocabulary?.length
+      ? `[${settings.custom_vocabulary.length} items]` : '[]',
+  };
+  const version = await getAppVersion();
+  return [
+    '## Debug Report',
+    '',
+    `**Error:** ${errorMessage}`,
+    `**Version:** ${version}`,
+    `**OS:** ${navigator.platform}`,
+    `**Timestamp:** ${new Date().toISOString()}`,
+    '',
+    '### Settings',
+    '```json',
+    JSON.stringify(safeSettings, null, 2),
+    '```',
+  ].join('\n');
+}
+
+async function showErrorToastWithReport(message, errorDetails) {
+  if (!toastEl) return;
+  const debugInfo = await collectDebugInfo(errorDetails);
+  const githubUrl = 'https://github.com/RuKapSan/easy-dictate/issues/new?title='
+    + encodeURIComponent('Save Error: ' + errorDetails)
+    + '&body=' + encodeURIComponent(debugInfo);
+
+  toastEl.textContent = '';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'toast-close';
+  closeBtn.textContent = '\u00d7';
+  closeBtn.addEventListener('click', () => { toastEl.hidden = true; });
+  toastEl.appendChild(closeBtn);
+
+  const content = document.createElement('div');
+  content.className = 'toast-content';
+
+  const msgSpan = document.createElement('span');
+  msgSpan.textContent = message;
+  content.appendChild(msgSpan);
+
+  const actions = document.createElement('div');
+  actions.className = 'toast-actions';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'toast-btn copy-debug';
+  copyBtn.textContent = t('toast.error.copy');
+  copyBtn.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(debugInfo);
+    copyBtn.textContent = t('toast.copied');
+    setTimeout(() => { copyBtn.textContent = t('toast.error.copy'); }, 1500);
+  });
+  actions.appendChild(copyBtn);
+
+  const reportLink = document.createElement('a');
+  reportLink.className = 'toast-btn report-bug';
+  reportLink.href = githubUrl;
+  reportLink.target = '_blank';
+  reportLink.rel = 'noopener noreferrer';
+  reportLink.textContent = t('toast.error.report');
+  actions.appendChild(reportLink);
+
+  content.appendChild(actions);
+  toastEl.appendChild(content);
+
+  toastEl.dataset.type = 'error';
+  toastEl.dataset.persistent = 'true';
+  toastEl.hidden = false;
 }
 
 // ============================================================================
@@ -195,8 +297,8 @@ async function persistSettings(payload, successMessage = null) {
     return true;
   } catch (error) {
     console.error("[PERSIST] save_settings failed:", error);
-    dbg(`save_settings failed: ${String(error)}`, "error");
-    showToast(t('toast.error.save'), "error");
+    dbg(`save_settings failed: ${errMsg(error)}`, "error");
+    await showErrorToastWithReport(t('toast.error.save'), errMsg(error));
     return false;
   }
 }
@@ -583,6 +685,12 @@ async function loadSettings() {
       customVocabularyInput.value = vocab.join('\n');
     }
 
+    // UI language (sync from backend)
+    if (settings.ui_language && window.i18n?.setLanguage) {
+      window.i18n.setLanguage(settings.ui_language);
+      if (uiLanguageSelect) uiLanguageSelect.value = settings.ui_language;
+    }
+
     syncTranslationUi();
     syncCustomInstructionsUi();
     syncVocabularyUi();
@@ -620,6 +728,8 @@ function currentSettings() {
     custom_instructions: (customInstructionsInput?.value ?? "").trim(),
     use_vocabulary: useVocabularyInput?.checked ?? false,
     custom_vocabulary: getVocabularyArray(),
+    ui_language: window.i18n?.getLanguage() ?? "ru",
+    llm_model: initialSettings?.llm_model ?? "gpt-4o-mini",
   };
 }
 
@@ -642,9 +752,14 @@ form?.addEventListener("submit", async (event) => {
     return;
   }
 
-  const saved = await persistSettings(payload, t('toast.settings.saved'));
-  if (saved && window.ElevenLabsSTT?.init) {
-    await window.ElevenLabsSTT.init(payload);
+  if (saveBtn) saveBtn.disabled = true;
+  try {
+    const saved = await persistSettings(payload, t('toast.settings.saved'));
+    if (saved && window.ElevenLabsSTT?.init) {
+      await window.ElevenLabsSTT.init(payload);
+    }
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
   }
 });
 
@@ -677,8 +792,15 @@ revertBtn?.addEventListener("click", () => {
   if (useCustomInstructionsInput) useCustomInstructionsInput.checked = Boolean(initialSettings.use_custom_instructions);
   if (customInstructionsInput) customInstructionsInput.value = initialSettings.custom_instructions ?? "";
 
+  // UI language
+  if (initialSettings.ui_language && window.i18n?.setLanguage) {
+    window.i18n.setLanguage(initialSettings.ui_language);
+    if (uiLanguageSelect) uiLanguageSelect.value = initialSettings.ui_language;
+  }
+
   syncTranslationUi();
   syncCustomInstructionsUi();
+  syncVocabularyUi();
   showToast(t('toast.changes.reverted'));
 });
 
@@ -791,7 +913,7 @@ async function loadHistory() {
     const history = await invoke("get_history");
     renderHistory(history);
   } catch (err) {
-    console.error("[History] Failed to load:", err);
+    console.error("[History] Failed to load:", errMsg(err));
   }
 }
 
@@ -936,7 +1058,7 @@ async function deleteHistoryEntry(id) {
     await invoke("delete_history_entry", { id });
     await loadHistory();
   } catch (err) {
-    console.error("[History] Failed to delete:", err);
+    console.error("[History] Failed to delete:", errMsg(err));
     showToast(t('toast.error.delete'), "error");
   }
 }
@@ -948,7 +1070,7 @@ async function clearAllHistory() {
     await loadHistory();
     showToast(t('toast.history.cleared'));
   } catch (err) {
-    console.error("[History] Failed to clear:", err);
+    console.error("[History] Failed to clear:", errMsg(err));
     showToast(t('toast.error.clear'), "error");
   }
 }
@@ -1021,9 +1143,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // Setup event listeners
+  // Setup event listeners (store unlisten functions for cleanup)
+  const unlistenFns = [];
+
   if (listen) {
-    await listen("transcription://status", ({ payload }) => {
+    unlistenFns.push(await listen("transcription://status", ({ payload }) => {
       const { phase, message } = payload;
       if (phase === "recording") {
         setStatus("recording", message ?? t('status.recording'));
@@ -1042,17 +1166,17 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (progressEl) progressEl.hidden = true;
         setStatus("success", message ?? t('status.success'));
       }
-    });
+    }));
 
-    await listen("transcription://partial", ({ payload }) => {
+    unlistenFns.push(await listen("transcription://partial", ({ payload }) => {
       if (!payload?.text || !resultEl) return;
       resultEl.hidden = false;
       resultEl.classList.add("partial");
       resultEl.textContent = payload.text;
       setStatus("recording", t('status.transcribing'));
-    });
+    }));
 
-    await listen("transcription://complete", ({ payload }) => {
+    unlistenFns.push(await listen("transcription://complete", ({ payload }) => {
       if (resultEl) {
         resultEl.classList.remove("partial");
         if (payload?.text) {
@@ -1063,9 +1187,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       showToast(t('status.success'), "success");
       setStatus("success", t('status.success'));
       loadHistory();
-    });
+    }));
 
-    await listen("settings://changed", ({ payload }) => {
+    unlistenFns.push(await listen("settings://changed", ({ payload }) => {
       const { auto_translate, target_language } = payload;
       if (autoTranslateInput && typeof auto_translate === 'boolean') {
         autoTranslateInput.checked = auto_translate;
@@ -1080,8 +1204,16 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
       }
       syncTranslationUi();
-    });
+    }));
   }
+
+  // Cleanup event listeners on unload to prevent leaks
+  window.addEventListener('beforeunload', () => {
+    unlistenFns.forEach(fn => fn());
+    if (window.ElevenLabsSTT?.cleanupEventListeners) {
+      window.ElevenLabsSTT.cleanupEventListeners();
+    }
+  });
 
   // Load history
   await loadHistory();

@@ -1,4 +1,7 @@
-use std::sync::{atomic::AtomicBool, Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64},
+    Arc, Mutex,
+};
 use std::thread::JoinHandle;
 
 use anyhow::Result;
@@ -44,27 +47,29 @@ pub struct HistoryEntry {
     pub custom_instructions_used: bool,
 }
 
+/// Data needed to create a new history entry
+pub struct NewHistoryEntry {
+    pub original: String,
+    pub translated: Option<String>,
+    pub source_language: Option<String>,
+    pub target_language: Option<String>,
+    pub transcription_provider: Option<String>,
+    pub llm_provider: Option<String>,
+    pub custom_instructions_used: bool,
+}
+
 impl HistoryEntry {
-    pub fn new(
-        id: u64,
-        original: String,
-        translated: Option<String>,
-        source_language: Option<String>,
-        target_language: Option<String>,
-        transcription_provider: Option<String>,
-        llm_provider: Option<String>,
-        custom_instructions_used: bool,
-    ) -> Self {
+    fn from_new(id: u64, data: NewHistoryEntry) -> Self {
         Self {
             id,
             timestamp: Utc::now(),
-            original_text: original,
-            translated_text: translated,
-            source_language,
-            target_language,
-            transcription_provider,
-            llm_provider,
-            custom_instructions_used,
+            original_text: data.original,
+            translated_text: data.translated,
+            source_language: data.source_language,
+            target_language: data.target_language,
+            transcription_provider: data.transcription_provider,
+            llm_provider: data.llm_provider,
+            custom_instructions_used: data.custom_instructions_used,
         }
     }
 }
@@ -80,14 +85,17 @@ const MAX_HISTORY_ENTRIES: usize = 100;
 
 pub struct AppState {
     settings_store: SettingsStore,
-    settings: RwLock<AppSettings>,
+    settings: RwLock<Arc<AppSettings>>,
     recorder: Recorder,
     active_recording: Mutex<Option<RecordingSession>>,
     transcription: TranscriptionService,
     elevenlabs_streaming: ElevenLabsStreamingClient,
     audio_streaming_handle: Mutex<Option<AudioStreamingHandle>>,
     is_transcribing: AtomicBool,
-    force_translate: AtomicBool,
+    /// Session ID for which force_translate was requested (0 = none)
+    force_translate_session: AtomicU64,
+    /// Current recording session counter
+    session_counter: AtomicU64,
     tray_status_item: Mutex<Option<MenuItem<tauri::Wry>>>,
     /// Transcription history
     history: RwLock<Vec<HistoryEntry>>,
@@ -111,26 +119,39 @@ impl AppState {
 
         Ok(Self {
             settings_store,
-            settings: RwLock::new(initial),
+            settings: RwLock::new(Arc::new(initial)),
             recorder,
             active_recording: Mutex::new(None),
             transcription,
             elevenlabs_streaming,
             audio_streaming_handle: Mutex::new(None),
             is_transcribing: AtomicBool::new(false),
-            force_translate: AtomicBool::new(false),
+            force_translate_session: AtomicU64::new(0),
+            session_counter: AtomicU64::new(0),
             tray_status_item: Mutex::new(None),
             history: RwLock::new(Vec::new()),
             history_id_counter: std::sync::atomic::AtomicU64::new(1),
         })
     }
 
-    pub async fn current_settings(&self) -> AppSettings {
+    pub async fn current_settings(&self) -> Arc<AppSettings> {
         self.settings.read().await.clone()
     }
 
+    /// Atomically read-modify-write settings under an exclusive lock.
+    pub async fn update_settings<F>(&self, f: F) -> AppSettings
+    where
+        F: FnOnce(&mut AppSettings),
+    {
+        let mut guard = self.settings.write().await;
+        let mut new = (**guard).clone();
+        f(&mut new);
+        *guard = Arc::new(new.clone());
+        new
+    }
+
     pub async fn replace_settings(&self, next: AppSettings) {
-        *self.settings.write().await = next;
+        *self.settings.write().await = Arc::new(next);
     }
 
     pub async fn persist_settings(&self, next: &AppSettings) -> Result<()> {
@@ -165,31 +186,46 @@ impl AppState {
         &self.audio_streaming_handle
     }
 
-    pub fn set_force_translate(&self, force: bool) {
-        self.force_translate.store(force, std::sync::atomic::Ordering::SeqCst);
+    /// Start a new recording session and return its ID.
+    /// If `force_translate` is true, mark this session for forced translation.
+    pub fn start_session(&self, force_translate: bool) -> u64 {
+        let session_id = self
+            .session_counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            + 1;
+        if force_translate {
+            self.force_translate_session
+                .store(session_id, std::sync::atomic::Ordering::SeqCst);
+        }
+        session_id
     }
 
-    pub fn get_force_translate(&self) -> bool {
-        self.force_translate.load(std::sync::atomic::Ordering::SeqCst)
+    /// Get the current session ID (set by the last start_session call).
+    pub fn current_session_id(&self) -> u64 {
+        self.session_counter
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    pub fn clear_force_translate(&self) {
-        self.force_translate.store(false, std::sync::atomic::Ordering::SeqCst);
+    /// Check if the given session has force_translate, and consume it.
+    pub fn take_force_translate(&self, session_id: u64) -> bool {
+        let stored = self
+            .force_translate_session
+            .load(std::sync::atomic::Ordering::SeqCst);
+        if stored == session_id && stored != 0 {
+            self.force_translate_session
+                .store(0, std::sync::atomic::Ordering::SeqCst);
+            true
+        } else {
+            false
+        }
     }
 
     /// Add a new entry to the history
-    pub async fn add_history_entry(
-        &self,
-        original: String,
-        translated: Option<String>,
-        source_language: Option<String>,
-        target_language: Option<String>,
-        transcription_provider: Option<String>,
-        llm_provider: Option<String>,
-        custom_instructions_used: bool,
-    ) -> HistoryEntry {
-        let id = self.history_id_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let entry = HistoryEntry::new(id, original, translated, source_language, target_language, transcription_provider, llm_provider, custom_instructions_used);
+    pub async fn add_history_entry(&self, data: NewHistoryEntry) -> HistoryEntry {
+        let id = self
+            .history_id_counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let entry = HistoryEntry::from_new(id, data);
 
         let mut history = self.history.write().await;
         history.push(entry.clone());
@@ -200,7 +236,7 @@ impl AppState {
             history.drain(0..drain_count);
         }
 
-        log::info!("[History] Added entry {} (total: {})", id, history.len());
+        tracing::info!("[History] Added entry {} (total: {})", id, history.len());
         entry
     }
 
@@ -216,7 +252,7 @@ impl AppState {
     pub async fn clear_history(&self) {
         let mut history = self.history.write().await;
         history.clear();
-        log::info!("[History] Cleared all history entries");
+        tracing::info!("[History] Cleared all history entries");
     }
 
     /// Delete a specific history entry by ID
@@ -226,7 +262,7 @@ impl AppState {
         history.retain(|e| e.id != id);
         let deleted = history.len() < initial_len;
         if deleted {
-            log::info!("[History] Deleted entry {}", id);
+            tracing::info!("[History] Deleted entry {}", id);
         }
         deleted
     }

@@ -83,6 +83,17 @@ impl Recorder {
     }
 }
 
+impl Drop for RecordingSession {
+    fn drop(&mut self) {
+        if let Some(tx) = self.stop_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
 impl RecordingSession {
     pub fn stop(mut self) -> Result<Vec<u8>> {
         if self.started_at.elapsed().as_millis() < 120 {

@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod error;
 pub mod events;
 pub mod hotkey;
 pub mod state;
