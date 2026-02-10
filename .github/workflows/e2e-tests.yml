@@ -116,6 +116,9 @@ jobs:
 
       - name: Build Tauri app
         working-directory: src-tauri
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: cargo tauri build ${{ matrix.platform.run-e2e && '--debug' || '' }}
 
       - name: Run E2E tests
